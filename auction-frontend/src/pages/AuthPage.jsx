@@ -6,7 +6,7 @@ import { useRef } from 'react';
 
 const AuthPage = () => {
   const [isRegister, setIsRegister] = useState(false);
-  const [formData, setFormData] = useState({ name: '', email: '', password: '', role: 'buyer' });
+  const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -20,7 +20,7 @@ const AuthPage = () => {
     setError('');
     try {
       const endpoint = isRegister ? '/auth/register' : '/auth/login';
-      const payload = isRegister ? formData : { email: formData.email, password: formData.password };
+      const payload = { name: formData.name, email: formData.email, password: formData.password };
       const response = await api.post(endpoint, payload);
       if (!response.data?.token) throw new Error('Invalid response from server');
       setToken(response.data.token);
@@ -45,7 +45,7 @@ const AuthPage = () => {
         <div className="auth-banner">
           <div style={{ fontSize: '2.5rem', marginBottom: '8px' }}>🏛️</div>
           <h2>{isRegister ? 'Create Account' : 'Welcome Back'}</h2>
-          <p>{isRegister ? 'Register as a buyer or seller.' : 'Login to continue bidding.'}</p>
+          <p>{isRegister ? 'Create your account to start bidding and creating auctions.' : 'Login to continue bidding.'}</p>
         </div>
         {error && <p className="error-text">{error}</p>}
         <form onSubmit={handleSubmit} className="auth-form">
@@ -55,14 +55,6 @@ const AuthPage = () => {
                 <label className="form-label">Full Name</label>
                 <input id="name" type="text" name="name" value={formData.name}
                   onChange={handleChange} required className="form-field" placeholder="John Doe" />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Account Type</label>
-                <select id="role" name="role" value={formData.role}
-                  onChange={handleChange} className="form-field">
-                  <option value="buyer">Buyer</option>
-                  <option value="seller">Seller</option>
-                </select>
               </div>
             </>
           )}

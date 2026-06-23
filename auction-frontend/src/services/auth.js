@@ -39,11 +39,13 @@ export const isAuthenticated = () => {
 };
 
 export const isSeller = () => {
-  return getUserRole() === 'seller';
+  const role = getUserRole();
+  return role === 'user' || role === 'seller';
 };
 
 export const isBuyer = () => {
-  return getUserRole() === 'buyer';
+  const role = getUserRole();
+  return role === 'user' || role === 'buyer';
 };
 
 export const isAdmin = () => {

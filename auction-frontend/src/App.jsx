@@ -8,7 +8,7 @@ import SellerDashboard from './pages/SellerDashboard';
 import MyParticipationsPage from './pages/MyParticipationsPage';
 import ProfilePage from './pages/ProfilePage';
 import AdminDashboard from './pages/AdminDashboard';
-import { removeToken, isAuthenticated, isSeller, isAdmin, getUserName, getUserRole } from './services/auth';
+import { removeToken, isAuthenticated, isAdmin, getUserName, getUserRole } from './services/auth';
 
 const AppShell = () => {
   const navigate = useNavigate();
@@ -29,8 +29,8 @@ const AppShell = () => {
           {authenticated ? (
             <>
               <Link to="/" className="nav-link">Auctions</Link>
-              {isSeller() && <Link to="/seller" className="nav-link">My Auctions</Link>}
-              {!isSeller() && <Link to="/my-participations" className="nav-link">My Bids</Link>}
+              {!isAdmin() && <Link to="/seller" className="nav-link">My Auctions</Link>}
+              {!isAdmin() && <Link to="/my-participations" className="nav-link">My Bids</Link>}
               {isAdmin() && <Link to="/admin" className="nav-link">Admin</Link>}
               <Link to="/profile" className="nav-link">
                 <span className="nav-role-badge">{userRole}</span> {userName}
@@ -47,7 +47,7 @@ const AppShell = () => {
         <Route path="/auth" element={<AuthPage />} />
         <Route path="/" element={authenticated ? <HomePage /> : <Navigate to="/auth" />} />
         <Route path="/auction/:id" element={authenticated ? <AuctionDetailPage /> : <Navigate to="/auth" />} />
-        <Route path="/seller" element={authenticated && isSeller() ? <SellerDashboard /> : <Navigate to="/auth" />} />
+        <Route path="/seller" element={authenticated && !isAdmin() ? <SellerDashboard /> : <Navigate to="/auth" />} />
         <Route path="/my-participations" element={authenticated ? <MyParticipationsPage /> : <Navigate to="/auth" />} />
         <Route path="/profile" element={authenticated ? <ProfilePage /> : <Navigate to="/auth" />} />
         <Route path="/admin" element={authenticated && isAdmin() ? <AdminDashboard /> : <Navigate to="/" />} />

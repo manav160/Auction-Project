@@ -7,9 +7,40 @@ const connectDB = async () => {
 
     // Run migration: drop old index and ensure new one
     await runParticipationMigration();
+    await runUserMigration();
   } catch (error) {
     console.error(`Error: ${error.message}`);
     process.exit(1);
+  }
+};
+
+const runUserMigration = async () => {
+  try {
+    const User = require('../models/User');
+    console.log('[Migration] Starting user role & index migration...');
+
+    // 1. Drop old compound index if exists
+    try {
+      await User.collection.dropIndex('email_1_role_1');
+      console.log('[Migration] Dropped compound index email_1_role_1');
+    } catch (err) {
+      console.log('[Migration] No compound index email_1_role_1 to drop');
+    }
+
+    // 2. Update buyer/seller roles to user
+    const updateResult = await User.updateMany(
+      { role: { $in: ['buyer', 'seller'] } },
+      { $set: { role: 'user' } }
+    );
+    console.log(`[Migration] Migrated ${updateResult.modifiedCount || 0} accounts to 'user'`);
+
+    // 3. Ensure unique index on email
+    await User.collection.createIndex({ email: 1 }, { unique: true });
+    console.log('[Migration] Ensured unique index on email');
+
+    console.log('[Migration] User migration completed successfully!');
+  } catch (error) {
+    console.error('[Migration] Error migrating users:', error.message);
   }
 };
 
