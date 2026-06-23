@@ -8,6 +8,7 @@ const userSchema = new mongoose.Schema({
   email: {
     type: String,
     required: true,
+    unique: true,
   },
   password: {
     type: String,
@@ -15,15 +16,15 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['buyer', 'seller'],
+    enum: ['user', 'admin'],
     required: true,
-    default: 'buyer',
+    default: 'user',
   },
   walletBalance: {
     type: Number,
     default: 15000, // Default starting balance for simulation
   },
-  lockedBalance: {
+  lockedBalance: {// Balance that is locked due to active bids
     type: Number,
     default: 0,
   },
@@ -33,8 +34,5 @@ const userSchema = new mongoose.Schema({
   },
 
 });
-
-// Same email can exist for different roles, but not for the same role
-userSchema.index({ email: 1, role: 1 }, { unique: true });
 
 module.exports = mongoose.model('User', userSchema);
