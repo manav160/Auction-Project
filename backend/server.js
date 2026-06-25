@@ -1,3 +1,7 @@
+// Fix DNS resolution for MongoDB Atlas on Windows
+const dns = require('dns');
+dns.setServers(['8.8.8.8', '8.8.4.4', '1.1.1.1']);
+
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
