@@ -15,7 +15,7 @@ const AdminUsers = () => {
       {loading ? <p>Loading...</p> : (
         <div className="admin-table-wrapper">
           <table className="admin-table">
-            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Wallet</th><th>Locked</th></tr></thead>
+            <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Wallet</th><th>Locked</th><th>Available</th></tr></thead>
             <tbody>
               {users.map(u => (
                 <tr key={u._id}>
@@ -23,6 +23,7 @@ const AdminUsers = () => {
                   <td><span className="status-pill status-active">{u.role}</span></td>
                   <td>₹{u.walletBalance?.toLocaleString()}</td>
                   <td>₹{u.lockedBalance?.toLocaleString()}</td>
+                  <td><strong style={{ color: '#3b82f6' }}>₹{((u.walletBalance || 0) - (u.lockedBalance || 0)).toLocaleString()}</strong></td>
                 </tr>
               ))}
             </tbody>
