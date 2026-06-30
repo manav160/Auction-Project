@@ -17,16 +17,18 @@ const getAuctions = async (req, res) => {
     const { status, search, sort } = req.query;
 
     // Build filter
-    const filter = {};
+    const filter = {};// Default: no filter
     if (status === 'active') {
       filter.isActive = true;
       filter.endDate = { $gt: new Date() };
-    } else if (status === 'closed') {
+    } 
+    else if (status === 'closed') {
       filter.$or = [
         { isActive: false },
         { endDate: { $lte: new Date() } },
       ];
     }
+    
     if (search) {
       filter.title = { $regex: search, $options: 'i' };
     }
