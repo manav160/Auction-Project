@@ -29,7 +29,7 @@ const enrichAuction = async (auction, userId) => {
     // Minimum next bid
     auctionObj.minAllowedBid = auction.currentHighestBid + 100;
 
-    // Default values
+    // Default values to prevent undefined value in isparticipated and userBid
     auctionObj.isParticipated = false;
     auctionObj.userBid = null;
 
