@@ -2,6 +2,7 @@ const Auction = require('../models/Auction');
 const Bid = require('../models/Bid');
 const Participation = require('../models/Participation');
 const { enrichAuction, enrichAuctions } = require('../utils/enricher');
+const { isValidObjectId } = require('mongoose');
 
 
 
@@ -60,7 +61,6 @@ const getAuctions = async (req, res) => {
 // @access  Public (enhanced if authenticated)
 const getAuctionById = async (req, res) => {
   try {
-    const { isValidObjectId } = require('mongoose');
     if (!isValidObjectId(req.params.id)) {
       return res.status(400).json({ message: 'Invalid auction ID' });
     }
