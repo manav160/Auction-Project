@@ -101,7 +101,7 @@ const createAuction = async (req, res) => {
   try {
     const { title, description, startingPrice, endDate, bidIncrementOptions, maxParticipants, endCondition, autoDelete } = req.body;
 
-    if (!title || !description || !startingPrice || !endDate) {
+    if (!title || !description || startingPrice == null || !endDate) {
       return res.status(400).json({ message: 'Please add all required fields' });
     }
 
