@@ -121,10 +121,10 @@ const createAuction = async (req, res) => {
       startingPrice,
       endDate,
       sellerId: req.user.id,
-      bidIncrementOptions: bidIncrementOptions || [100, 500, 1000],
-      maxParticipants: maxParticipants || 15,
-      endCondition: endCondition || 'either',
-      autoDelete: autoDelete || false,
+      bidIncrementOptions: bidIncrementOptions ?? [100, 500, 1000],
+      maxParticipants: maxParticipants ?? 15,
+      endCondition: endCondition ?? 'either',
+      autoDelete: autoDelete ?? false,
     });
 
     res.status(201).json(auction);
