@@ -202,7 +202,7 @@ const deleteAuction = async (req, res) => {
     }
 
     // Only the seller who created it can delete
-    if (auction.sellerId.toString() !== req.user.id) {
+    if (auction.sellerId.toString() !== req.user.id) {// see in up we created auction object which is mongodb object and we are comparing it with string so we need to convert it to string
       return res.status(403).json({ message: 'Not authorized to delete this auction' });
     }
 
@@ -214,7 +214,7 @@ const deleteAuction = async (req, res) => {
 
     // Clean up related participations
     await Participation.deleteMany({ auctionId: auction._id });
-    await Auction.findByIdAndDelete(req.params.id);
+    await Auction.deleteOne({ _id: req.params.id });
 
     res.json({ message: 'Auction deleted successfully' });
   } catch (error) {
