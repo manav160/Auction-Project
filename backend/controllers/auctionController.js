@@ -479,7 +479,8 @@ const getBidHistory = async (req, res) => {
 
     const bids = await Bid.find({ auctionId })
       .populate('userId', 'name email')
-      .sort({ createdAt: -1 });
+      .sort({ createdAt: -1 })
+      .lean(); // Use lean for better performance
 
     res.json({
       count: bids.length,
