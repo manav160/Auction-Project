@@ -65,29 +65,17 @@ const AuctionDetailPage = () => {
     }
   }, [id]);
 
-  const [customDate, setCustomDate] = useState('');
+  const [extendDays, setExtendDays] = useState(1);
 
   const handleExtend = async () => {
-    if (!window.confirm('Extending the auction by 1 day will cost ₹1,000. Continue?')) return;
+    const estimatedFee = extendDays * Math.max(10, 0.01 * auction.currentHighestBid);
+    if (!window.confirm(`Extending the auction by ${extendDays} day(s) will cost ₹${estimatedFee.toLocaleString()}. Proceed to mock payment?`)) return;
     try {
-      await api.post('/extend', { auctionId: id });
+      const response = await api.post('/extend', { auctionId: id, days: extendDays });
+      triggerSuccess(`${response.data.message}. Fee paid: ₹${response.data.fee.toLocaleString()}`);
       fetchAuction();
     } catch (err) {
       setError(err.response?.data?.message || 'Extension failed');
-    }
-  };
-
-  const handleUpdateDate = async () => {
-    if (!customDate) return;
-    const isExtension = new Date(customDate) > new Date(auction.endDate);
-    if (isExtension && !window.confirm('Setting this date will cost ₹1,000 as it extends the auction. Continue?')) return;
-    
-    try {
-      await api.put('/extend/date', { auctionId: id, newEndDate: customDate });
-      fetchAuction();
-      setCustomDate('');
-    } catch (err) {
-      setError(err.response?.data?.message || 'Date update failed');
     }
   };
 
@@ -438,27 +426,29 @@ const AuctionDetailPage = () => {
             <div className="seller-management-panel glass-panel">
               <div className="panel-header">
                 <h3>Seller Management</h3>
-                <span className="fee-notice">₹1,000 per manual extension</span>
+                <span className="fee-notice">Total extension limit: 7 days</span>
               </div>
               
               <div className="seller-actions">
-                <button onClick={handleExtend} className="secondary-button extend-action-btn">
-                  Quick Extend (1 Day)
-                </button>
-
                 <div className="custom-date-update">
-                  <p>Or set custom end date:</p>
+                  <p>Select days to extend (1-7):</p>
                   <div className="date-input-group">
-                    <input 
-                      type="datetime-local" 
-                      value={customDate}
-                      onChange={(e) => setCustomDate(e.target.value)}
+                    <select 
+                      value={extendDays}
+                      onChange={(e) => setExtendDays(Number(e.target.value))}
                       className="form-field date-picker"
-                    />
-                    <button onClick={handleUpdateDate} className="primary-button update-date-btn">
-                      Update Date
+                    >
+                      {[1, 2, 3, 4, 5, 6, 7].map(d => (
+                        <option key={d} value={d}>{d} Day{d > 1 ? 's' : ''}</option>
+                      ))}
+                    </select>
+                    <button onClick={handleExtend} className="primary-button update-date-btn">
+                      Confirm & Extend
                     </button>
                   </div>
+                  <p style={{ marginTop: '10px', fontSize: '0.9rem', color: '#64748b' }}>
+                    Estimated Fee: ₹{(extendDays * Math.max(10, 0.01 * auction.currentHighestBid)).toLocaleString()}
+                  </p>
                 </div>
               </div>
             </div>

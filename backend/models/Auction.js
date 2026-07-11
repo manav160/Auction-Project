@@ -54,6 +54,23 @@ const auctionSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  extendedDays: {
+    type: Number,
+    default: 0
+  },
+  totalExtensionFeePaid: {
+    type: Number,
+    default: 0
+  },
+  lastExtensionDate: {
+    type: Date,
+    default: null
+  },
+  extensionHistory: [{
+    days: Number,
+    fee: Number,
+    extendedAt: Date
+  }],
   isActive: {
     type: Boolean,
     default: true
