@@ -18,7 +18,6 @@ const BidHistory = ({ bids }) => {
           <li key={bid._id || index} className="bid-item">
             <div className="bid-item-info">
               <span className="bid-user">{bid.userId?.name || 'Anonymous'}</span>
-              <span className="bid-time">{new Date(bid.createdAt).toLocaleString()}</span>
             </div>
             <span className="bid-amount">₹{bid.amount?.toLocaleString()}</span>
           </li>

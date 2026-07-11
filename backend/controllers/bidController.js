@@ -181,7 +181,7 @@ const getBidHistory = async (req, res) => {
   try {
     const { auctionId } = req.params;
     const bids = await Bid.find({ auctionId })
-      .populate('userId', 'name email')
+      .populate('userId', 'name')
       .sort({ amount: -1 }); // Sorted DESC by amount
     
     res.json(bids);
