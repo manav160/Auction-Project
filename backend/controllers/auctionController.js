@@ -22,14 +22,14 @@ const getAuctions = async (req, res) => {
     if (status === 'active') {
       filter.isActive = true;
       filter.endDate = { $gt: new Date() };
-    } 
+    }
     else if (status === 'closed') {
       filter.$or = [
         { isActive: false },
         { endDate: { $lte: new Date() } },
       ];
     }
-    
+
     if (search) {
       filter.title = { $regex: search, $options: 'i' };
     }
@@ -302,13 +302,13 @@ const joinAuction = async (req, res) => {
 
     // Update auction participantsCount atomically
     const updatedAuction = await Auction.findOneAndUpdate(
-      { 
-        _id: auctionId, 
+      {
+        _id: auctionId,
         participantsCount: { $lt: auction.maxParticipants },
-        isActive: true 
+        isActive: true
       },
-      { 
-        $inc: { participantsCount: 1 } 
+      {
+        $inc: { participantsCount: 1 }
       },
       { new: true }
     );
@@ -553,44 +553,62 @@ const extendAuction = async (req, res) => {
 // @desc    Close an auction manually (seller only)
 // @route   POST /api/auctions/:id/close
 // @access  Private (Seller owner only)
+const { isValidObjectId } = require("mongoose");
+
 const closeAuction = async (req, res) => {
   try {
-    const auction = await Auction.findById(req.params.id);
+    if (!isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: "Invalid auction ID" });
+    }
+
+    const auction = await Auction.findById(req.params.id)
+      .populate("winnerId", "name email");
 
     if (!auction) {
-      return res.status(404).json({ message: 'Auction not found' });
+      return res.status(404).json({ message: "Auction not found" });
     }
 
+    // Only the seller can close the auction
     if (auction.sellerId.toString() !== req.user.id) {
-      return res.status(403).json({ message: 'Only the seller can close the auction' });
+      return res.status(403).json({ message: "Only the seller can close the auction" });
     }
 
+    // Auction already closed
     if (!auction.isActive) {
-      return res.status(400).json({ message: 'Auction is already closed' });
+      return res.status(400).json({ message: "Auction is already closed" });
+    }
+
+    // Prevent manual closing once bidding has started
+    const hasBid = await Bid.exists({
+      auctionId: auction._id,
+    });
+
+    if (hasBid) {
+      return res.status(400).json({
+        message: "Auction cannot be manually closed after bidding has started.",
+      });
     }
 
     auction.isActive = false;
+    auction.closedAt = new Date();
+    auction.closedBy = "SELLER";
+
     await auction.save();
 
-    // Get winner info
-    let winner = null;
-    if (auction.winnerId) {
-      const User = require('../models/User');
-      winner = await User.findById(auction.winnerId).select('name email');
-    }
-
     res.json({
-      message: 'Auction closed successfully',
+      message: "Auction closed successfully",
       auction: {
         id: auction._id,
         isActive: auction.isActive,
         currentHighestBid: auction.currentHighestBid,
-        winner,
+        winner: auction.winnerId,
+        closedAt: auction.closedAt,
+        closedBy: auction.closedBy,
       },
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: "Server error" });
   }
 };
 
