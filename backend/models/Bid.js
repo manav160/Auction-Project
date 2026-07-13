@@ -13,8 +13,17 @@ const bidSchema = new mongoose.Schema({
   },
   amount: {
     type: Number,
-    required: true
+    required: true,
+    min: 10
   }
-}, { timestamps: true });
+}, {
+  timestamps: true
+});
+
+// Query all bids for an auction, usually sorted by amount
+bidSchema.index({ auctionId: 1, amount: -1 });
+
+// Query a user's bidding history
+bidSchema.index({ userId: 1 });
 
 module.exports = mongoose.model('Bid', bidSchema);

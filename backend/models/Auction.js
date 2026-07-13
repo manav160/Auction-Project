@@ -3,15 +3,20 @@ const mongoose = require('mongoose');
 const auctionSchema = new mongoose.Schema({
   title: {
     type: String,
+    trim: true,
+    maxlength: 150,
     required: true
   },
   description: {
     type: String,
+    trim: true,
+    maxlength: 500,
     required: true
   },
   startingPrice: {
     type: Number,
-    required: true
+    required: true,
+    min: 10
   },
   currentHighestBid: {
     type: Number,
@@ -39,11 +44,13 @@ const auctionSchema = new mongoose.Schema({
   },
   maxParticipants: {
     type: Number,
-    default: 15
+    default: 15,
+    min:10
   },
   participantsCount: {
     type: Number,
-    default: 0
+    default: 0,
+    min:0
   },
   endCondition: {
     type: String,
@@ -56,11 +63,13 @@ const auctionSchema = new mongoose.Schema({
   },
   extendedDays: {
     type: Number,
-    default: 0
+    default: 0,
+    min:0
   },
   totalExtensionFeePaid: {
     type: Number,
-    default: 0
+    default: 0,
+    min:0
   },
   lastExtensionDate: {
     type: Date,
@@ -76,5 +85,10 @@ const auctionSchema = new mongoose.Schema({
     default: true
   }
 }, { timestamps: true });
+
+// Indexes to optimize frequently used queries
+auctionSchema.index({ sellerId: 1 });
+auctionSchema.index({ isActive: 1 });
+auctionSchema.index({ endDate: 1 });
 
 module.exports = mongoose.model('Auction', auctionSchema);

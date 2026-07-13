@@ -1,27 +1,34 @@
 const mongoose = require('mongoose');
 
-const participationSchema = new mongoose.Schema({
+const participationSchema = new mongoose.Schema(
+  {
   auctionId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Auction',
-    required: true,
-  },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Auction',
+      required: true,
+    },
   userId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: true,
-  },
-  email: {
-    type: String,
-    required: true,
-  },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+    },
   joinedAt: {
-    type: Date,
-    default: Date.now,
+      type: Date,
+      default: Date.now,
+    },
   },
-});
+  {
+    timestamps: false, // We already have joinedAt
+  }
+);
 
-// Ensure the same email can only join an auction once
-participationSchema.index({ auctionId: 1, email: 1 }, { unique: true });
+// A user can join a particular auction only once
+participationSchema.index(
+  { auctionId: 1, userId: 1 },
+  { unique: true }
+);
+
+// Fast lookup: "Which auctions has this user joined?"
+participationSchema.index({ userId: 1 });
 
 module.exports = mongoose.model('Participation', participationSchema);
