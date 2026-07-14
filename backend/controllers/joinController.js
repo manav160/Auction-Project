@@ -141,6 +141,17 @@ const unjoinAuction = async (req, res) => {
     if (!participation) {
       return res.status(404).json({ success: false, message: 'Participation not found' });
     }
+    const existingBid = await Bid.exists({
+    auctionId,
+    userId
+});
+
+if (existingBid) {
+    return res.status(400).json({
+        success: false,
+        message: "You cannot leave an auction after placing a bid."
+    });
+}
 
     // 1. Remove all bids by this user for this auction
     await Bid.deleteMany({ auctionId, userId });
