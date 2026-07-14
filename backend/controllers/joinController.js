@@ -1,8 +1,8 @@
 const Participation = require('../models/Participation');
 const Auction = require('../models/Auction');
 const Bid = require('../models/Bid');
+const User = require('../models/User');
 const socket = require('../socket');
-
 
 // @desc    Join an auction
 // @route   POST /api/join
@@ -130,105 +130,80 @@ const unjoinAuction = async (req, res) => {
     const { auctionId } = req.params;
     const userId = req.user.id;
 
-    const User = require('../models/User');
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    const participation = await Participation.findOneAndDelete({ auctionId, email: user.email });
-    
-    if (!participation) {
-      return res.status(404).json({ success: false, message: 'Participation not found' });
-    }
-    const existingBid = await Bid.exists({
-    auctionId,
-    userId
-});
-
-if (existingBid) {
-    return res.status(400).json({
+      return res.status(404).json({
         success: false,
-        message: "You cannot leave an auction after placing a bid."
-    });
-}
-
-    // 1. Remove all bids by this user for this auction
-    await Bid.deleteMany({ auctionId, userId });
-
-    // 2. Decrement participantsCount atomically
-    let auction = await Auction.findById(auctionId);
-    if (!auction) {
-      return res.status(404).json({ success: false, message: 'Auction not found' });
-    }
-
-    auction.participantsCount = Math.max(0, auction.participantsCount - 1);
-
-    // 3. If this user was the current winner, refund their locked balance and find next winner
-    if (auction.winnerId && auction.winnerId.toString() === userId) {
-      const lockedAmount = auction.currentHighestBid;
-      
-      // Refund the unjoining winner
-      const User = require('../models/User');
-      await User.findByIdAndUpdate(userId, {
-        $inc: {
-          walletBalance: lockedAmount,
-          lockedBalance: -lockedAmount
-        }
+        message: 'User not found'
       });
-      console.log(`Refunded ₹${lockedAmount} to unjoining winner ${userId}`);
-
-      // Find the highest remaining bid
-      const nextHighestBid = await Bid.findOne({ auctionId })
-        .sort({ amount: -1 })
-        .populate('userId', 'name email');
-
-      if (nextHighestBid) {
-        auction.currentHighestBid = nextHighestBid.amount;
-        auction.winnerId = nextHighestBid.userId._id;
-
-        // LOCK the new winner's balance
-        await User.findByIdAndUpdate(auction.winnerId, {
-          $inc: {
-            walletBalance: -auction.currentHighestBid,
-            lockedBalance: auction.currentHighestBid
-          }
-        });
-        console.log(`Locked ₹${auction.currentHighestBid} for new promoted winner ${auction.winnerId}`);
-      } else {
-        // No bids left
-        auction.currentHighestBid = auction.startingPrice;
-        auction.winnerId = null;
-      }
     }
 
-
-    await auction.save();
-
-    // 4. Emit update to all clients via Socket.io
-    const io = socket.getIo();
-    io.emit('bidPlaced', {
+    const participation = await Participation.findOne({
       auctionId,
-      currentHighestBid: auction.currentHighestBid,
-      winnerId: auction.winnerId,
-      endDate: auction.endDate,
-      // We don't have a specific "bid" object here, but the frontend should refresh history
-      refreshHistory: true 
+      email: user.email
+    });
+
+    if (!participation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Participation not found'
+      });
+    }
+
+    // User cannot leave after placing a bid
+    const hasBid = await Bid.exists({ auctionId, userId });
+
+    if (hasBid) {
+      return res.status(400).json({
+        success: false,
+        message: 'You cannot leave an auction after placing a bid.'
+      });
+    }
+
+    // Remove participation
+    await participation.deleteOne();
+
+    // Decrement participants count atomically
+    const auction = await Auction.findOneAndUpdate(
+      {
+        _id: auctionId,
+        participantsCount: { $gt: 0 }
+      },
+      {
+        $inc: { participantsCount: -1 }
+      },
+      {
+        new: true
+      }
+    );
+
+    if (!auction) {
+      return res.status(404).json({
+        success: false,
+        message: 'Auction not found'
+      });
+    }
+
+    // Notify all connected clients
+    const io = socket.getIo();
+    io.emit('participantsUpdated', {
+      auctionId,
+      participantsCount: auction.participantsCount
     });
 
     res.json({
       success: true,
       joined: false,
-      message: 'Successfully left the auction and updated bid status',
-      participantsCount: auction.participantsCount,
-      auction: {
-        currentHighestBid: auction.currentHighestBid,
-        winnerId: auction.winnerId
-      }
+      message: 'Successfully left the auction.',
+      participantsCount: auction.participantsCount
     });
+
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    console.error('Unjoin Error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
   }
 };
 
