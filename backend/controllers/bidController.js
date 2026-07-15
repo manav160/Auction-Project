@@ -40,7 +40,7 @@ const placeBid = async (req, res) => {
     }
 
     // 2. Check auction is active and time valid
-    
+
     if (!auctionCheck.isActive || new Date() > new Date(auctionCheck.endDate)) {
       // If time passed but isActive is still true, close it
       if (auctionCheck.isActive) {
@@ -50,17 +50,18 @@ const placeBid = async (req, res) => {
       return res.status(400).json({ message: 'Auction is closed' });
     }
 
-    const minAllowedBid = auctionCheck.currentHighestBid + 100;
-    if (amount < minAllowedBid) {
-      return res.status(400).json({ 
-        message: `Bid must be at least ₹${minAllowedBid}` 
+    const minimumIncrement = Math.min(...auctionCheck.bidIncrementOptions);
+    const minAllowedBid = auctionCheck.currentHighestBid + minimumIncrement;
+     if (amount < minAllowedBid) {
+      return res.status(400).json({
+        message: `Bid must be at least ₹${minAllowedBid}`
       });
     }
 
     // =========================================================================
     // ESCROW / WALLET LOGIC
     // =========================================================================
-    
+
     // 1. Check if the current bidder has enough balance
     const bidder = await User.findById(userId);
     if (!bidder || bidder.walletBalance < amount) {
@@ -71,12 +72,12 @@ const placeBid = async (req, res) => {
     if (auctionCheck.winnerId) {
       const prevWinnerId = auctionCheck.winnerId;
       const prevBidAmount = auctionCheck.currentHighestBid;
-      
+
       // Move locked balance back to wallet balance for the previous winner
       await User.findByIdAndUpdate(prevWinnerId, {
-        $inc: { 
+        $inc: {
           walletBalance: prevBidAmount,
-          lockedBalance: -prevBidAmount 
+          lockedBalance: -prevBidAmount
         }
       });
       console.log(`Refunded ₹${prevBidAmount} to user ${prevWinnerId}`);
@@ -96,16 +97,16 @@ const placeBid = async (req, res) => {
     // 3. Atomically update the auction if the bid is higher
     // This prevents concurrency issues (e.g. 2 users reading the same highest bid and updating at same time)
     const updatedAuction = await Auction.findOneAndUpdate(
-      { 
-        _id: auctionId, 
+      {
+        _id: auctionId,
         currentHighestBid: { $lt: amount },
         isActive: true,
       },
-      { 
-        $set: { 
+      {
+        $set: {
           currentHighestBid: amount,
-          winnerId: userId 
-        } 
+          winnerId: userId
+        }
       },
       { new: true }
     );
@@ -151,11 +152,11 @@ const placeBid = async (req, res) => {
       endDate: updatedAuction.endDate,
       bid: {
         ...bid.toObject(),
-        userId: { 
-          _id: userId, 
-          name: biddingUser?.name || 'Unknown User', 
-          email: biddingUser?.email || '' 
-        } 
+        userId: {
+          _id: userId,
+          name: biddingUser?.name || 'Unknown User',
+          email: biddingUser?.email || ''
+        }
       }
     });
 
@@ -183,7 +184,7 @@ const getBidHistory = async (req, res) => {
     const bids = await Bid.find({ auctionId })
       .populate('userId', 'name')
       .sort({ amount: -1 }); // Sorted DESC by amount
-    
+
     res.json(bids);
   } catch (error) {
     console.error(error);
