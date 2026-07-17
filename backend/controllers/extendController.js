@@ -47,6 +47,8 @@ const extendAuction = async (req, res) => {
     });
 
     // Add days to endDate
+// We assign a brand-new Date object because JavaScript Dates are mutable. 
+// If we mutate the date in-place, Mongoose won't detect the reference change and will fail to save it.   
     const currentEndDate = new Date(auction.endDate);
     currentEndDate.setDate(currentEndDate.getDate() + parsedDays);
 
