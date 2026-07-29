@@ -115,11 +115,17 @@ const createAuction = async (req, res) => {
       return res.status(400).json({ message: 'Starting price must be greater than 0' });
     }
 
+    let imageUrl = null;
+    if (req.file) {
+      imageUrl = req.file.path;
+    }
+
     const auction = await Auction.create({
       title,
       description,
       startingPrice,
       endDate,
+      imageUrl,
       sellerId: req.user.id,
       bidIncrementOptions: bidIncrementOptions ?? [100, 500, 1000],
       maxParticipants: maxParticipants ?? 15,
@@ -181,6 +187,10 @@ const updateAuction = async (req, res) => {
     }
     if (req.body.maxParticipants) auction.maxParticipants = req.body.maxParticipants;
     if (typeof req.body.autoDelete !== 'undefined') auction.autoDelete = req.body.autoDelete;
+
+    if (req.file) {
+      auction.imageUrl = req.file.path;
+    }
 
     await auction.save();
     res.json(auction);

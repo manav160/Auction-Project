@@ -13,6 +13,10 @@ const auctionSchema = new mongoose.Schema({
     maxlength: 500,
     required: true
   },
+  imageUrl: {
+    type: String,
+    default: null
+  },
   startingPrice: {
     type: Number,
     required: true,

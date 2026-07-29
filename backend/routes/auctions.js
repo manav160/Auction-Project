@@ -15,12 +15,13 @@ const {
   closeAuction
 } = require('../controllers/auctionController');
 const { protect } = require('../middleware/authMiddleware');
+const upload = require('../middleware/uploadMiddleware');
 
 router.get('/seller', protect, getSellerAuctions);
 router.get('/', getAuctions);
-router.post('/', protect, createAuction);
+router.post('/', protect, upload.single('image'), createAuction);
 router.get('/:id', getAuctionById);
-router.put('/:id', protect, updateAuction);
+router.put('/:id', protect, upload.single('image'), updateAuction);
 router.delete('/:id', protect, deleteAuction);
 router.post('/:id/close', protect, closeAuction);
 
