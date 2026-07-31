@@ -9,9 +9,9 @@ const connectDB = require('./config/db');
 const http = require('http');
 const path = require('path');
 const socket = require('./socket');
+const AuctionService = require('./services/auctionService');
 
 dotenv.config();
-connectDB();
 
 const app = express();
 const server = http.createServer(app);
@@ -36,6 +36,22 @@ app.use('/api/admin', require('./routes/admin'));
 
 const PORT = process.env.PORT || 3001;
 
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Connect to DB, then start server and recover auction timers
+connectDB().then(async () => {
+  // Run a startup reconciliation check
+  const ReconciliationService = require('./services/reconciliationService');
+  await ReconciliationService.runReconciliation();
+
+  // Initialize Platform Settings
+  const PlatformSettingsService = require('./services/platformSettingsService');
+  await PlatformSettingsService.getSettings();
+
+  server.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+  });
+
+  // Recovery sweep: re-schedule timers for all ACTIVE auctions
+  AuctionService.recoverActiveAuctions().catch((err) => {
+    console.error('[Recovery] Failed to recover active auctions:', err);
+  });
 });
