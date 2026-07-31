@@ -3,15 +3,21 @@ import api from '../services/api';
 import { animateAuctionSuccess, animateAuctionError } from '../utils/auctionAnimations';
 
 const AuctionForm = ({ onAuctionCreated }) => {
+  const now = new Date();
+  const defaultStart = now.toISOString().slice(0, 16);
+  const defaultEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16);
+
   const [formData, setFormData] = useState({
     title: '',
     description: '',
     startingPrice: '',
+    startDate: '',
     endDate: '',
     maxParticipants: 15,
     bidIncrementOptions: [100, 500, 1000],
     endCondition: 'either',
-    autoDelete: false,
+    listingType: 'STANDARD',
+    entryFee: 0,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -27,15 +33,24 @@ const AuctionForm = ({ onAuctionCreated }) => {
     setLoading(true);
     setError('');
     try {
-      await api.post('/auctions', {
+      const payload = {
         ...formData,
         startingPrice: parseFloat(formData.startingPrice),
-        maxParticipants: parseInt(formData.maxParticipants),
-      });
+        entryFee: parseFloat(formData.entryFee) || 0,
+        maxParticipants: formData.endCondition === 'time' ? 9999 : parseInt(formData.maxParticipants),
+        endDate: formData.endCondition === 'participants'
+          ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
+          : (formData.endDate || defaultEnd),
+      };
+      
+      if (!payload.startDate) delete payload.startDate;
+
+      await api.post('/auctions', payload);
       setFormData({
-        title: '', description: '', startingPrice: '', endDate: '',
+        title: '', description: '', startingPrice: '',
+        startDate: '', endDate: '',
         maxParticipants: 15, bidIncrementOptions: [100, 500, 1000],
-        endCondition: 'either', autoDelete: false,
+        endCondition: 'either', listingType: 'STANDARD', entryFee: 0
       });
       animateAuctionSuccess(panelRef.current);
       if (onAuctionCreated) onAuctionCreated();
@@ -47,10 +62,6 @@ const AuctionForm = ({ onAuctionCreated }) => {
     }
   };
 
-  // Set default endDate to 7 days from now
-  const defaultEndDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    .toISOString().slice(0, 16);
-
   return (
     <div className="panel-card" ref={panelRef}>
       <div className="panel-header">
@@ -58,22 +69,59 @@ const AuctionForm = ({ onAuctionCreated }) => {
       </div>
       {error && <p className="error-text">{error}</p>}
       <form onSubmit={handleSubmit} className="auction-form">
+
+        {/* Listing Type Selection */}
+        <div className="form-group">
+          <label className="form-label">Listing Tier</label>
+          <select 
+            name="listingType" 
+            value={formData.listingType} 
+            onChange={handleChange} 
+            className="form-field"
+          >
+            <option value="STANDARD">Standard (Free Listing, 8% Platform Commission)</option>
+            <option value="PREMIUM">⭐ Premium (₹500 Fee, Featured Priority, 5% Reduced Commission, Up to 100 Bidders)</option>
+          </select>
+        </div>
+
         <input type="text" name="title" placeholder="Auction Title" value={formData.title}
           onChange={handleChange} required className="form-field" />
+
         <textarea name="description" placeholder="Description" value={formData.description}
           onChange={handleChange} required className="form-field textarea-field" />
-        <input type="number" name="startingPrice" placeholder="Starting Price (₹)" value={formData.startingPrice}
-          onChange={handleChange} required className="form-field" min="1" />
-        <div className="form-group">
-          <label className="form-label">End Date & Time</label>
-          <input type="datetime-local" name="endDate" value={formData.endDate || defaultEndDate}
-            onChange={handleChange} required className="form-field" min={new Date().toISOString().slice(0, 16)} />
+
+        <div className="form-row" style={{ display: 'flex', gap: '1rem' }}>
+          <div style={{ flex: 1 }}>
+            <label className="form-label">Starting Price (₹)</label>
+            <input type="number" name="startingPrice" placeholder="1000" value={formData.startingPrice}
+              onChange={handleChange} required className="form-field" min="10" />
+          </div>
+
+          <div style={{ flex: 1 }}>
+            <label className="form-label">Buyer Entry Fee (₹)</label>
+            <input type="number" name="entryFee" placeholder="0" value={formData.entryFee}
+              onChange={handleChange} className="form-field" min="0" max="1000" />
+            <span className="form-hint" style={{ fontSize: '0.75rem' }}>₹0 = Free Entry</span>
+          </div>
         </div>
+
+        {/* Start date */}
         <div className="form-group">
-          <label className="form-label">Max Participants</label>
-          <input type="number" name="maxParticipants" value={formData.maxParticipants}
-            onChange={handleChange} className="form-field" min="2" max="100" />
+          <label className="form-label">
+            Start Date &amp; Time
+            <span className="form-hint"> — Leave blank to go live immediately</span>
+          </label>
+          <input
+            type="datetime-local"
+            name="startDate"
+            value={formData.startDate}
+            onChange={handleChange}
+            className="form-field"
+            min={defaultStart}
+          />
         </div>
+
+        {/* End condition */}
         <div className="form-group">
           <label className="form-label">End Condition</label>
           <select name="endCondition" value={formData.endCondition}
@@ -83,8 +131,34 @@ const AuctionForm = ({ onAuctionCreated }) => {
             <option value="either">Whichever comes first</option>
           </select>
         </div>
+
+        {/* End Date */}
+        {formData.endCondition !== 'participants' && (
+          <div className="form-group">
+            <label className="form-label">End Date &amp; Time</label>
+            <input
+              type="datetime-local"
+              name="endDate"
+              value={formData.endDate || defaultEnd}
+              onChange={handleChange}
+              required
+              className="form-field"
+              min={formData.startDate || defaultStart}
+            />
+          </div>
+        )}
+
+        {/* Max Participants */}
+        {formData.endCondition !== 'time' && (
+          <div className="form-group">
+            <label className="form-label">Max Participants</label>
+            <input type="number" name="maxParticipants" value={formData.maxParticipants}
+              onChange={handleChange} className="form-field" min="2" max={formData.listingType === 'PREMIUM' ? 100 : 15} />
+          </div>
+        )}
+
         <button type="submit" disabled={loading} className="primary-button">
-          {loading ? 'Creating...' : 'Create Auction'}
+          {loading ? 'Creating...' : formData.listingType === 'PREMIUM' ? 'Pay ₹500 & Launch Premium Auction' : 'Launch Auction'}
         </button>
       </form>
     </div>
