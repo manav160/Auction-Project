@@ -226,6 +226,27 @@ const AuctionDetailPage = () => {
       setError(err.response?.data?.message || 'Failed to increase bid');
     }
   };
+  const handleToggleWatchlist = async () => {
+    try {
+      const res = await api.post(`/watchlist/${id}/toggle`);
+      setAuction(prev => ({ ...prev, isWatchlisted: res.data.isWatchlisted }));
+      triggerSuccess(res.data.isWatchlisted ? 'Added to Watchlist! ❤️' : 'Removed from Watchlist! 🤍');
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to toggle watchlist');
+    }
+  };
+
+  const handleBuyNow = async () => {
+    if (!window.confirm(`Are you sure you want to purchase this item immediately for ₹${auction.buyNowPrice?.toLocaleString()}?`)) return;
+    try {
+      await api.post(`/auctions/${id}/buynow`);
+      triggerSuccess('Congratulations! You purchased the item successfully via Buy Now 🎉');
+      fetchAuction();
+      fetchBidHistory();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Buy Now purchase failed');
+    }
+  };
 
   const handleBid = async () => {
     const amount = parseFloat(bidAmount);
@@ -271,27 +292,61 @@ const AuctionDetailPage = () => {
       )}
       <div className="detail-grid">
         <section className="detail-card">
-          <div className="detail-header">
-            <h1>
-              {isPremium && <span className="premium-star">⭐ </span>}
-              {auction.title}
-            </h1>
-            <div className="badge-row">
-              {isPremium && <span className="status-pill premium-badge" style={{ backgroundColor: '#ffd700', color: '#000', fontWeight: 'bold' }}>PREMIUM</span>}
-              <span className={`status-pill status-${auction.status?.toLowerCase()}`}>
-                {{
-                  ACTIVE:             '🔴 Live',
-                  SCHEDULED:          '🗓 Scheduled',
-                  PENDING_RESOLUTION: '⏳ Resolving…',
-                  COMPLETED:          '✅ Completed',
-                  UNSOLD:             '📦 Unsold',
-                  CANCELED:           '🚫 Canceled',
-                  DRAFT:              '📝 Draft',
-                }[auction.status] || auction.status}
-              </span>
-              {auction.isOwner && <span className="nav-role-badge owner-badge">Your Auction</span>}
-              {auction.isParticipated && <span className="nav-role-badge participation-badge">Participated</span>}
+          <div className="detail-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h1 style={{ margin: 0 }}>
+                {isPremium && <span className="premium-star">⭐ </span>}
+                {auction.title}
+              </h1>
+              <div className="badge-row" style={{ marginTop: '0.5rem' }}>
+                {isPremium && <span className="status-pill premium-badge" style={{ backgroundColor: '#ffd700', color: '#000', fontWeight: 'bold' }}>PREMIUM</span>}
+                <span className={`status-pill status-${auction.status?.toLowerCase()}`}>
+                  {{
+                    ACTIVE:             '🔴 Live',
+                    SCHEDULED:          '🗓 Scheduled',
+                    PENDING_RESOLUTION: '⏳ Resolving…',
+                    COMPLETED:          '✅ Completed',
+                    UNSOLD:             '📦 Unsold',
+                    CANCELED:           '🚫 Canceled',
+                    DRAFT:              '📝 Draft',
+                  }[auction.status] || auction.status}
+                </span>
+                {auction.category && auction.category !== 'Other' && (
+                  <span className="status-pill" style={{ backgroundColor: 'rgba(99, 102, 241, 0.12)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                    {auction.category}
+                  </span>
+                )}
+                {auction.condition && (
+                  <span className="status-pill" style={{ backgroundColor: 'rgba(14, 165, 233, 0.12)', color: '#0ea5e9', border: '1px solid rgba(14, 165, 233, 0.2)' }}>
+                    {auction.condition.replace('_', ' ')}
+                  </span>
+                )}
+                {auction.isOwner && <span className="nav-role-badge owner-badge">Your Auction</span>}
+                {auction.isParticipated && <span className="nav-role-badge participation-badge">Participated</span>}
+              </div>
             </div>
+            {isBuyer() && !auction.isOwner && (
+              <button
+                className={`watchlist-heart-btn ${auction.isWatchlisted ? 'watchlisted' : ''}`}
+                style={{
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: '50%',
+                  width: '45px',
+                  height: '45px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.4rem',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s',
+                }}
+                onClick={handleToggleWatchlist}
+                title={auction.isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
+              >
+                {auction.isWatchlisted ? '❤️' : '🤍'}
+              </button>
+            )}
           </div>
           
           {auction.picture && (
@@ -348,8 +403,15 @@ const AuctionDetailPage = () => {
           <div className="detail-metrics">
             <div>
               <strong>Current Highest Bid</strong>
-              <p>₹{auction.currentHighestBid}</p>
+              <p>₹{auction.currentHighestBid?.toLocaleString()}</p>
             </div>
+
+            {auction.buyNowPrice && (
+              <div>
+                <strong>Buy Now Price</strong>
+                <p style={{ color: '#8b5cf6', fontWeight: 'bold' }}>⚡ ₹{auction.buyNowPrice?.toLocaleString()}</p>
+              </div>
+            )}
 
             <div>
               <strong>Entry Fee</strong>
@@ -383,6 +445,34 @@ const AuctionDetailPage = () => {
           </div>
 
           <BidChart bids={bidHistory} />
+
+          {isLive && !auction.isOwner && isBuyer() && auction.buyNowPrice && (
+            <div className="buy-now-panel" style={{
+              background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(139, 92, 246, 0.05) 100%)',
+              border: '1px solid rgba(124, 58, 237, 0.3)',
+              borderRadius: '12px',
+              padding: '1.25rem',
+              marginBottom: '1.5rem',
+              textAlign: 'center'
+            }}>
+              <h4 style={{ margin: '0 0 0.5rem 0', color: '#a78bfa', fontSize: '1.1rem' }}>⚡ Instant Purchase Available</h4>
+              <p style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', opacity: 0.8 }}>Bypass bidding and claim this item instantly via secure ledger settlement.</p>
+              <button 
+                onClick={handleBuyNow} 
+                className="primary-button" 
+                style={{ 
+                  background: 'linear-gradient(90deg, #7c3aed 0%, #8b5cf6 100%)', 
+                  border: 'none', 
+                  padding: '0.75rem 2rem', 
+                  fontSize: '1.05rem',
+                  fontWeight: 'bold',
+                  boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)'
+                }}
+              >
+                Buy Now for ₹{auction.buyNowPrice?.toLocaleString()}
+              </button>
+            </div>
+          )}
 
           {isLive && !auction.isOwner && !auction.isParticipated && isBuyer() && (
             <button

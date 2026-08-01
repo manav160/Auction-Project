@@ -435,3 +435,178 @@
 .App-link {
   color: #61dafb;
 }
+
+/* Premium Listing Badges & Card Wrapper */
+.premium-wrapper {
+  background: linear-gradient(135deg, #ffd700 0%, #b8860b 100%);
+  padding: 3px;
+  border-radius: 25px;
+  box-shadow: 0 10px 25px rgba(218, 165, 32, 0.2);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.premium-wrapper:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 15px 35px rgba(218, 165, 32, 0.35);
+}
+
+.premium-card {
+  background: linear-gradient(180deg, #18191b, #111215) !important;
+  color: #f8fafc !important;
+  border: 1px solid rgba(255, 215, 0, 0.15) !important;
+}
+
+.premium-card p,
+.premium-card strong,
+.premium-card h3 {
+  color: #f8fafc !important;
+}
+
+/* Watchlist Heart Button */
+.watchlist-heart-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 0.4rem 0.6rem;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.watchlist-heart-btn:hover {
+  transform: scale(1.1);
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.3) !important;
+}
+
+.watchlist-heart-btn.watchlisted {
+  background: rgba(239, 68, 68, 0.1) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  color: #ef4444;
+}
+
+/* Buy Now Panel Animations */
+.buy-now-panel {
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Marketplace Layout and Interactive Sidebar Transitions */
+.marketplace-layout {
+  display: flex;
+  gap: 2rem;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  align-items: flex-start;
+}
+
+.filter-panel-card {
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 20px;
+  overflow: hidden;
+  height: auto;
+}
+
+.marketplace-layout.hero-active .filter-panel-card {
+  flex: 0 0 450px;
+  max-width: 450px;
+  padding: 24px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.01) 100%);
+}
+
+.marketplace-layout.sidebar-active .filter-panel-card {
+  flex: 0 0 290px;
+  max-width: 290px;
+  padding: 16px;
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.08);
+}
+
+.filter-scroll-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.marketplace-layout.sidebar-active .filter-scroll-container {
+  gap: 0.85rem;
+}
+
+.marketplace-layout.sidebar-active .form-group {
+  margin-bottom: 0.25rem;
+}
+
+.marketplace-layout.sidebar-active .form-field {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 0.9rem;
+}
+
+.marketplace-layout.sidebar-active .form-label {
+  font-size: 0.85rem;
+  margin-bottom: 4px;
+}
+
+.results-panel {
+  flex: 1;
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Grid Layout Column Adjustment */
+.marketplace-layout.hero-active .auction-grid {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.marketplace-layout.sidebar-active .auction-grid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+/* Glowing Search Box when Active */
+.search-input-glow {
+  transition: all 0.3s ease;
+}
+
+.search-input-glow:focus {
+  border-color: #7c3aed !important;
+  box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.2) !important;
+  background: #ffffff !important;
+}
+
+/* Live Indicator Tag */
+.live-indicator-tag {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  animation: pulseLive 2s infinite ease-in-out;
+}
+
+@keyframes pulseLive {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 0.7;
+    transform: scale(0.98);
+  }
+}
+

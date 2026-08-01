@@ -11,7 +11,7 @@ const STATUS_META = {
   CANCELED:            { label: 'Canceled',           css: 'status-closed' },
 };
 
-const AuctionCard = ({ auction, onExtend }) => {
+const AuctionCard = ({ auction, onExtend, onToggleWatchlist }) => {
   const navigate = useNavigate();
   const handleClick = () => navigate(`/auction/${auction._id}`);
 
@@ -21,6 +21,7 @@ const AuctionCard = ({ auction, onExtend }) => {
   const isLive      = rawStatus === 'ACTIVE';
   const isScheduled = rawStatus === 'SCHEDULED';
   const isPremium   = auction.listingType === 'PREMIUM';
+  const hasBuyNow   = auction.buyNowPrice && auction.buyNowPrice > 0;
 
   return (
     <div className={`auction-card-wrapper ${isPremium ? 'premium-wrapper' : ''}`}>
@@ -39,13 +40,18 @@ const AuctionCard = ({ auction, onExtend }) => {
             {isPremium && <span className="premium-star" title="Premium Listing">⭐ </span>}
             {auction.title}
           </h3>
-          <div className="status-badge-group" style={{ display: 'flex', gap: '0.3rem', alignItems: 'center' }}>
+          <div className="status-badge-group" style={{ display: 'flex', gap: '0.3rem', alignItems: 'center', flexWrap: 'wrap' }}>
             {isPremium && <span className="status-pill premium-badge" style={{ backgroundColor: '#ffd700', color: '#000', fontWeight: 'bold' }}>PREMIUM</span>}
             <span className={`status-pill ${meta.css}`}>{meta.label}</span>
           </div>
         </div>
         <div className="auction-card-body">
           <p><strong>Current Bid:</strong> ₹{auction.currentHighestBid?.toLocaleString()}</p>
+          
+          {hasBuyNow && (
+            <p><strong>Buy Now:</strong> <span style={{ color: '#8b5cf6', fontWeight: 'bold' }}>⚡ ₹{auction.buyNowPrice?.toLocaleString()}</span></p>
+          )}
+
           <p><strong>Participants:</strong> {auction.participantsCount} / {auction.maxParticipants}</p>
 
           {auction.entryFee > 0 ? (
@@ -60,20 +66,54 @@ const AuctionCard = ({ auction, onExtend }) => {
 
           <p><strong>{isLive ? 'Ends:' : isScheduled ? 'Ends (after start):' : 'Ended:'}</strong> {new Date(auction.endDate).toLocaleString()}</p>
 
+          <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+            {auction.category && auction.category !== 'Other' && (
+              <span className="status-pill" style={{ backgroundColor: 'rgba(99, 102, 241, 0.12)', color: '#6366f1', fontSize: '0.7rem', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
+                {auction.category}
+              </span>
+            )}
+            {auction.condition && (
+              <span className="status-pill" style={{ backgroundColor: 'rgba(14, 165, 233, 0.12)', color: '#0ea5e9', fontSize: '0.7rem', border: '1px solid rgba(14, 165, 233, 0.2)' }}>
+                {auction.condition.replace('_', ' ')}
+              </span>
+            )}
+          </div>
+
           {auction.isParticipated && (
-            <span className="participated-badge">✓ Joined</span>
+            <span className="participated-badge" style={{ marginTop: '0.5rem', display: 'inline-block' }}>✓ Joined</span>
           )}
         </div>
       </div>
 
-      {onExtend && isLive && (
-        <button
-          className="extend-button"
-          onClick={(e) => { e.stopPropagation(); onExtend(auction._id); }}
-        >
-          ⏱ Extend
-        </button>
-      )}
+      <div className="card-actions" style={{ display: 'flex', gap: '0.5rem', padding: '0.5rem 1rem 1rem' }}>
+        {onExtend && isLive && (
+          <button
+            className="extend-button"
+            style={{ flex: 1 }}
+            onClick={(e) => { e.stopPropagation(); onExtend(auction._id); }}
+          >
+            ⏱ Extend
+          </button>
+        )}
+        {onToggleWatchlist && (
+          <button
+            className={`watchlist-heart-btn ${auction.isWatchlisted ? 'watchlisted' : ''}`}
+            style={{
+              background: 'transparent',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: '6px',
+              padding: '0.4rem 0.6rem',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              transition: 'all 0.2s',
+            }}
+            onClick={(e) => { e.stopPropagation(); onToggleWatchlist(auction._id); }}
+            title={auction.isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
+          >
+            {auction.isWatchlisted ? '❤️' : '🤍'}
+          </button>
+        )}
+      </div>
     </div>
   );
 };

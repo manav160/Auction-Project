@@ -11,6 +11,9 @@ const AuctionForm = ({ onAuctionCreated }) => {
     title: '',
     description: '',
     startingPrice: '',
+    buyNowPrice: '',
+    category: 'Other',
+    condition: 'NEW',
     startDate: '',
     endDate: '',
     maxParticipants: 15,
@@ -41,6 +44,9 @@ const AuctionForm = ({ onAuctionCreated }) => {
         endDate: formData.endCondition === 'participants'
           ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
           : (formData.endDate || defaultEnd),
+        buyNowPrice: parseFloat(formData.buyNowPrice) || null,
+        category: formData.category,
+        condition: formData.condition,
       };
       
       if (!payload.startDate) delete payload.startDate;
@@ -50,7 +56,8 @@ const AuctionForm = ({ onAuctionCreated }) => {
         title: '', description: '', startingPrice: '',
         startDate: '', endDate: '',
         maxParticipants: 15, bidIncrementOptions: [100, 500, 1000],
-        endCondition: 'either', listingType: 'STANDARD', entryFee: 0
+        endCondition: 'either', listingType: 'STANDARD', entryFee: 0,
+        category: 'Other', condition: 'NEW', buyNowPrice: ''
       });
       animateAuctionSuccess(panelRef.current);
       if (onAuctionCreated) onAuctionCreated();
@@ -84,6 +91,40 @@ const AuctionForm = ({ onAuctionCreated }) => {
           </select>
         </div>
 
+        {/* Category & Condition Row */}
+        <div className="form-row" style={{ display: 'flex', gap: '1rem' }}>
+          <div style={{ flex: 1 }}>
+            <label className="form-label">Category</label>
+            <select
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+              className="form-field"
+            >
+              <option value="Electronics">Electronics</option>
+              <option value="Collectibles">Collectibles</option>
+              <option value="Fashion">Fashion</option>
+              <option value="Home">Home</option>
+              <option value="Motors">Motors</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <div style={{ flex: 1 }}>
+            <label className="form-label">Condition</label>
+            <select
+              name="condition"
+              value={formData.condition}
+              onChange={handleChange}
+              className="form-field"
+            >
+              <option value="NEW">New</option>
+              <option value="LIKE_NEW">Like New</option>
+              <option value="USED">Used</option>
+              <option value="REFURBISHED">Refurbished</option>
+            </select>
+          </div>
+        </div>
+
         <input type="text" name="title" placeholder="Auction Title" value={formData.title}
           onChange={handleChange} required className="form-field" />
 
@@ -103,6 +144,21 @@ const AuctionForm = ({ onAuctionCreated }) => {
               onChange={handleChange} className="form-field" min="0" max="1000" />
             <span className="form-hint" style={{ fontSize: '0.75rem' }}>₹0 = Free Entry</span>
           </div>
+        </div>
+
+        {/* Buy Now Price */}
+        <div className="form-group">
+          <label className="form-label">Buy Now Price (₹)</label>
+          <input
+            type="number"
+            name="buyNowPrice"
+            placeholder="Optional"
+            value={formData.buyNowPrice}
+            onChange={handleChange}
+            className="form-field"
+            min={formData.startingPrice ? parseFloat(formData.startingPrice) + 1 : 1}
+          />
+          <span className="form-hint" style={{ fontSize: '0.75rem' }}>Leave blank for no instant purchase</span>
         </div>
 
         {/* Start date */}
