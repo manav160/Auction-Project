@@ -41,6 +41,8 @@ const getJoinedAuctions = async (req, res) => {
 // @desc    Increase bid by a specified increment
 // @route   POST /api/buyer/increase-bid
 // @access  Private (Buyer)
+const BiddingService = require('../services/biddingService');
+
 const increaseBid = async (req, res) => {
   try {
     const { auctionId, increment } = req.body;
@@ -50,133 +52,24 @@ const increaseBid = async (req, res) => {
       return res.status(400).json({ message: 'Auction ID and increment are required' });
     }
 
-    // Check auction exists
     const auction = await Auction.findById(auctionId);
     if (!auction) {
       return res.status(404).json({ message: 'Auction not found' });
     }
 
-    // Check if auction is active
-    if (!auction.isActive || new Date() > new Date(auction.endDate)) {
-      if (auction.isActive) {
-        auction.isActive = false;
-        await auction.save();
-      }
-      return res.status(400).json({ message: 'Auction is closed' });
-    }
-
-    // Seller cannot bid on their own auction
-    if (auction.sellerId.toString() === userId) {
-      return res.status(403).json({ message: 'You cannot bid on your own auction' });
-    }
-
-    // Get user to retrieve email
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    // Check if user has joined the auction (by email)
-    const hasJoined = await Participation.findOne({ auctionId, email: user.email });
-    if (!hasJoined) {
-      return res.status(403).json({ message: 'You must join the auction before bidding' });
-    }
-
-    // Validate increment is allowed
-    if (!auction.bidIncrementOptions.includes(Number(increment))) {
-      return res.status(400).json({ 
-        message: 'Invalid increment option',
-        allowedOptions: auction.bidIncrementOptions 
-      });
-    }
-
     const newBidAmount = auction.currentHighestBid + Number(increment);
 
-    // =========================================================================
-    // ESCROW / WALLET LOGIC
-    // =========================================================================
-    
-    // 1. Check if the current bidder has enough balance
-    const bidder = await User.findById(userId);
-    if (!bidder || bidder.walletBalance < newBidAmount) {
-      return res.status(400).json({ message: 'Insufficient wallet balance to place this bid' });
-    }
-
-    // 2. Refund the previous winner (if any)
-    if (auction.winnerId) {
-      const prevWinnerId = auction.winnerId;
-      const prevBidAmount = auction.currentHighestBid;
-      
-      // Move locked balance back to wallet balance for the previous winner
-      await User.findByIdAndUpdate(prevWinnerId, {
-        $inc: { 
-          walletBalance: prevBidAmount,
-          lockedBalance: -prevBidAmount 
-        }
-      });
-      console.log(`Refunded ₹${prevBidAmount} to user ${prevWinnerId}`);
-    }
-
-    // 3. Lock the current bidder's amount
-    await User.findByIdAndUpdate(userId, {
-      $inc: {
-        walletBalance: -newBidAmount,
-        lockedBalance: newBidAmount
-      }
+    // Delegate to transactional bidding service
+    const { auction: updatedAuction, bid } = await BiddingService.placeBid({
+      auctionId,
+      userId,
+      amount: newBidAmount
     });
-    console.log(`Locked ₹${newBidAmount} for user ${userId}`);
-
-    // =========================================================================
-
-    // Atomically update the auction
-    const updatedAuction = await Auction.findOneAndUpdate(
-      {
-        _id: auctionId,
-        currentHighestBid: auction.currentHighestBid, // ensures no one bid in between
-        isActive: true,
-      },
-      {
-        $set: {
-          currentHighestBid: newBidAmount,
-          winnerId: userId,
-        },
-      },
-      { new: true }
-    );
-
-
-    if (!updatedAuction) {
-      return res.status(400).json({
-        message: 'Bid failed. Someone might have placed a higher bid or auction closed.',
-      });
-    }
 
     const socket = require('../socket');
     const io = socket.getIo();
-
-    // 5. Anti-Snipe Extension Logic
-    const now = new Date();
-    const currentEnd = new Date(updatedAuction.endDate);
-    const diffMs = currentEnd - now;
-    const TWO_MINUTES_MS = 2 * 60 * 1000;
-    const FIVE_MINUTES_MS = 5 * 60 * 1000;
-
-    if (diffMs > 0 && diffMs < TWO_MINUTES_MS) {
-      const newEndDate = new Date(currentEnd.getTime() + FIVE_MINUTES_MS);
-      updatedAuction.endDate = newEndDate;
-      await updatedAuction.save();
-      console.log(`Auction ${auctionId} extended by 5 minutes (Anti-Snipe)`);
-    }
-
-    // Save the bid record
-    const bid = await Bid.create({
-      auctionId,
-      userId,
-      amount: newBidAmount,
-    });
-
-    // 6. Emit event to all clients
     const biddingUser = await User.findById(userId).select('name email');
+
     io.emit('bidPlaced', {
       auctionId,
       currentHighestBid: updatedAuction.currentHighestBid,
@@ -184,14 +77,13 @@ const increaseBid = async (req, res) => {
       endDate: updatedAuction.endDate,
       bid: {
         ...bid.toObject(),
-        userId: { 
-          _id: userId, 
-          name: biddingUser?.name || 'Unknown User', 
-          email: biddingUser?.email || '' 
-        } 
+        userId: {
+          _id: userId,
+          name: biddingUser?.name || 'Unknown User',
+          email: biddingUser?.email || ''
+        }
       }
     });
-
 
     res.status(201).json({
       message: 'Bid increased successfully',
@@ -204,8 +96,8 @@ const increaseBid = async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Increase Bid Error:', error);
+    res.status(400).json({ message: error.message || 'Failed to increase bid' });
   }
 };
 
