@@ -15,6 +15,10 @@ const bidSchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 10
+  },
+  isBuyNow: {
+    type: Boolean,
+    default: false
   }
 }, {
   timestamps: true
