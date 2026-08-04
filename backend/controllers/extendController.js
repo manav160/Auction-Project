@@ -61,7 +61,7 @@ const extendAuction = async (req, res) => {
       sellerId: userId,
       amount: fee,
       status: 'Success'
-    }], { session });
+    }], { session, ordered: true });
 
     // Update auction dates and extension parameters
     const currentEndDate = new Date(auction.endDate);

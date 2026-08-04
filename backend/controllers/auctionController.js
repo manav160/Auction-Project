@@ -239,7 +239,7 @@ const createAuction = async (req, res) => {
       entryFee: numericEntryFee,
       finalValueCommissionPct,
       status: 'DRAFT'
-    }], { session });
+    }], { session, ordered: true });
 
     if (isPremium) {
       await WalletService.payPremiumFee({

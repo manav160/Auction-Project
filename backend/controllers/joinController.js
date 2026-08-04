@@ -94,7 +94,7 @@ const joinAuction = async (req, res) => {
       auctionId,
       userId,
       entryFeePaid
-    }], { session });
+    }], { session, ordered: true });
 
     // Atomically increment auction participantsCount & totalEntryFeesCollected
     const updatedAuction = await Auction.findOneAndUpdate(
