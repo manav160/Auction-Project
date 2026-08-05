@@ -21,14 +21,6 @@ const userSchema = new mongoose.Schema({
     required: true,
     default: 'user',
   },
-  walletBalance: {
-    type: Number,
-    default: 15000, // Default starting balance for simulation
-  },
-  lockedBalance: {// Balance that is locked due to active bids
-    type: Number,
-    default: 0,
-  },
   createdAt: {
     type: Date,
     default: Date.now,
