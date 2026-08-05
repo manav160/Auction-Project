@@ -33,7 +33,7 @@ app.use('/api/join', require('./routes/join'));
 app.use('/api/participations', require('./routes/participations'));
 app.use('/api/extend', require('./routes/extend'));
 app.use('/api/admin', require('./routes/admin'));
-
+app.use('/api/watchlist', require('./routes/watchlist'));
 const PORT = process.env.PORT || 3001;
 
 // Connect to DB, then start server and recover auction timers
@@ -45,13 +45,14 @@ connectDB().then(async () => {
   // Initialize Platform Settings
   const PlatformSettingsService = require('./services/platformSettingsService');
   await PlatformSettingsService.getSettings();
-
+  // Recovery sweep: re-schedule timers for all ACTIVE auctions
+  await AuctionService.recoverActiveAuctions().catch((err) => {
+    console.error('[Recovery] Failed to recover active auctions:', err);
+  });
+  // user cant hit any end point before server is ready and all active auctions are recovered
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
 
-  // Recovery sweep: re-schedule timers for all ACTIVE auctions
-  AuctionService.recoverActiveAuctions().catch((err) => {
-    console.error('[Recovery] Failed to recover active auctions:', err);
-  });
+
 });
