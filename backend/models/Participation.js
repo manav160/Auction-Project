@@ -2,23 +2,28 @@ const mongoose = require('mongoose');
 
 const participationSchema = new mongoose.Schema(
   {
-  auctionId: {
+    auctionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Auction',
       required: true,
     },
-  userId: {
+    userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
       required: true,
     },
-  joinedAt: {
+    entryFeePaid: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    joinedAt: {
       type: Date,
       default: Date.now,
     },
   },
   {
-    timestamps: false, // We already have joinedAt
+    timestamps: false,
   }
 );
 

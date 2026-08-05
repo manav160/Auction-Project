@@ -17,6 +17,16 @@ const auctionSchema = new mongoose.Schema({
     type: String,
     default: null
   },
+  category: {
+    type: String,
+    enum: ['Electronics', 'Collectibles', 'Fashion', 'Home', 'Motors', 'Other'],
+    default: 'Other'
+  },
+  condition: {
+    type: String,
+    enum: ['NEW', 'LIKE_NEW', 'USED', 'REFURBISHED'],
+    default: 'NEW'
+  },
   startingPrice: {
     type: Number,
     required: true,
@@ -27,6 +37,19 @@ const auctionSchema = new mongoose.Schema({
     default: function() {
       return this.startingPrice;
     }
+  },
+  buyNowPrice: {
+    type: Number,
+    default: null,
+    min: 0
+  },
+  buyNowPurchased: {
+    type: Boolean,
+    default: false
+  },
+  startDate: {
+    type: Date,
+    default: Date.now
   },
   endDate: {
     type: Date,
@@ -49,31 +72,54 @@ const auctionSchema = new mongoose.Schema({
   maxParticipants: {
     type: Number,
     default: 15,
-    min:10
+    min: 1
   },
   participantsCount: {
     type: Number,
     default: 0,
-    min:0
+    min: 0
   },
   endCondition: {
     type: String,
     enum: ['time', 'participants', 'either'],
     default: 'either'
   },
-  autoDelete: {
-    type: Boolean,
-    default: false
+  // Business Model Fields
+  listingType: {
+    type: String,
+    enum: ['STANDARD', 'PREMIUM'],
+    default: 'STANDARD'
+  },
+  premiumFeePaid: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  entryFee: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  finalValueCommissionPct: {
+    type: Number,
+    default: 8,
+    min: 0,
+    max: 100
+  },
+  totalEntryFeesCollected: {
+    type: Number,
+    default: 0,
+    min: 0
   },
   extendedDays: {
     type: Number,
     default: 0,
-    min:0
+    min: 0
   },
   totalExtensionFeePaid: {
     type: Number,
     default: 0,
-    min:0
+    min: 0
   },
   lastExtensionDate: {
     type: Date,
@@ -84,15 +130,23 @@ const auctionSchema = new mongoose.Schema({
     fee: Number,
     extendedAt: Date
   }],
-  isActive: {
-    type: Boolean,
-    default: true
+  status: {
+    type: String,
+    enum: ['DRAFT', 'SCHEDULED', 'ACTIVE', 'PENDING_RESOLUTION', 'COMPLETED', 'CANCELED', 'UNSOLD'],
+    default: 'DRAFT'
   }
-}, { timestamps: true });
+}, { timestamps: true, optimisticConcurrency: true });
 
-// Indexes to optimize frequently used queries
+// Text search index
+auctionSchema.index({ title: 'text', description: 'text' });
+
+// Compound & Query Optimization Indexes
+auctionSchema.index({ listingType: -1, createdAt: -1 });
 auctionSchema.index({ sellerId: 1 });
-auctionSchema.index({ isActive: 1 });
+auctionSchema.index({ status: 1 });
+auctionSchema.index({ category: 1, status: 1 });
+auctionSchema.index({ condition: 1 });
+auctionSchema.index({ buyNowPrice: 1 });
 auctionSchema.index({ endDate: 1 });
 
 module.exports = mongoose.model('Auction', auctionSchema);
