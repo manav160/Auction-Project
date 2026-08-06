@@ -4,29 +4,34 @@ const {
   getAuctions,
   getAuctionById,
   createAuction,
+  buyNow,
   updateAuction,
   deleteAuction,
   getSellerAuctions,
-  joinAuction,
   getParticipants,
   placeBid,
   getBidHistory,
   extendAuction,
   closeAuction
 } = require('../controllers/auctionController');
-const { protect } = require('../middleware/authMiddleware');
+const { joinAuction, unjoinAuction } = require('../controllers/joinController');
+const { protect, optionalAuth } = require('../middleware/authMiddleware');
 const upload = require('../middleware/uploadMiddleware');
 
 router.get('/seller', protect, getSellerAuctions);
-router.get('/', getAuctions);
+router.get('/', optionalAuth, getAuctions);
 router.post('/', protect, upload.single('image'), createAuction);
-router.get('/:id', getAuctionById);
+router.get('/:id', optionalAuth, getAuctionById);
 router.put('/:id', protect, upload.single('image'), updateAuction);
 router.delete('/:id', protect, deleteAuction);
 router.post('/:id/close', protect, closeAuction);
 
-// Join / Participate
+// Buy Now
+router.post('/:id/buynow', protect, buyNow);
+
+// Join / Participate / Unjoin
 router.post('/:id/join', protect, joinAuction);
+router.delete('/:id/join', protect, unjoinAuction);
 router.get('/:id/participants', protect, getParticipants);
 
 // Bids
