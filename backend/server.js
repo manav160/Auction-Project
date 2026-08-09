@@ -50,6 +50,8 @@ connectDB().then(async () => {
     console.error('[Recovery] Failed to recover active auctions:', err);
   });
   // user cant hit any end point before server is ready and all active auctions are recovered
+  // active auctions rely on in-memory timers (setTimeout). After a server restart those timers are lost.
+  //  Recovering them before accepting requests ensures auctions continue correctly and prevents users from interacting with auctions in an inconsistent state.
   server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });
