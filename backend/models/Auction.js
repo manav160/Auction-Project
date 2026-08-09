@@ -1,5 +1,26 @@
 const mongoose = require('mongoose');
 
+// Embedded sub-schema for bids stored inside each auction document
+const embeddedBidSchema = new mongoose.Schema({
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  amount: {
+    type: Number,
+    required: true
+  },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  isBuyNow: {
+    type: Boolean,
+    default: false
+  }
+}, { _id: true });
+
 const auctionSchema = new mongoose.Schema({
   title: {
     type: String,
@@ -130,6 +151,8 @@ const auctionSchema = new mongoose.Schema({
     fee: Number,
     extendedAt: Date
   }],
+  // Embedded bids array — all bids for this auction live here
+  bids: [embeddedBidSchema],
   status: {
     type: String,
     enum: ['DRAFT', 'SCHEDULED', 'ACTIVE', 'PENDING_RESOLUTION', 'COMPLETED', 'CANCELED', 'UNSOLD'],

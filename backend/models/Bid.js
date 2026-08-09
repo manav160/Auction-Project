@@ -1,3 +1,8 @@
+/**
+ * @deprecated — Bids are now embedded inside Auction.bids[].
+ * This model is retained only for migration of legacy data.
+ * Do NOT use in new code paths.
+ */
 const mongoose = require('mongoose');
 
 const bidSchema = new mongoose.Schema({
