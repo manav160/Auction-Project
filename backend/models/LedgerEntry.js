@@ -6,21 +6,25 @@ const ledgerEntrySchema = new mongoose.Schema({
     ref: 'Wallet',
     required: true
   },
+
   transactionId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Transaction',
     required: true
   },
+
   type: {
     type: String,
     enum: ['DEBIT', 'CREDIT'],
     required: true
   },
+
   balanceType: {
     type: String,
     enum: ['AVAILABLE', 'LOCKED'],
     required: true
   },
+  
   amount: {
     type: Number,
     required: true,
