@@ -1,23 +1,29 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { io } from 'socket.io-client';
+import { Sparkles, Clock, Heart, Zap, Award, CheckCircle2, AlertCircle, Gavel, Box } from 'lucide-react';
 import api from '../services/api';
 import { isBuyer } from '../services/auth';
 import BidHistory from '../components/BidHistory';
 import ParticipantsList from '../components/ParticipantsList';
 import BidChart from '../components/BidChart';
+import { useConfirm } from '../utils/useConfirm';
 
 const AuctionDetailPage = () => {
   const { id } = useParams();
+  const { showConfirm, ConfirmDialog } = useConfirm();
   const [auction, setAuction] = useState(null);
   const [bidAmount, setBidAmount] = useState('');
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [error, setError] = useState('');
+  const [errorDismissing, setErrorDismissing] = useState(false);
   const [timeLeft, setTimeLeft] = useState('');
   const [isUrgent, setIsUrgent] = useState(false);
   const [bidHistory, setBidHistory] = useState([]);
   const [participants, setParticipants] = useState([]);
   const [successMessage, setSuccessMessage] = useState('');
+  const errorTimerRef = useRef(null);
 
   const triggerSuccess = (msg) => {
     setSuccessMessage(msg);
@@ -25,6 +31,25 @@ const AuctionDetailPage = () => {
       setSuccessMessage('');
     }, 4000);
   };
+
+  const dismissError = useCallback(() => {
+    setErrorDismissing(true);
+    setTimeout(() => {
+      setError('');
+      setErrorDismissing(false);
+    }, 400);
+  }, []);
+
+  useEffect(() => {
+    if (error) {
+      setErrorDismissing(false);
+      if (errorTimerRef.current) clearTimeout(errorTimerRef.current);
+      errorTimerRef.current = setTimeout(() => {
+        dismissError();
+      }, 5000);
+      return () => clearTimeout(errorTimerRef.current);
+    }
+  }, [error, dismissError]);
 
   const fetchAuction = useCallback(async () => {
     try {
@@ -34,7 +59,7 @@ const AuctionDetailPage = () => {
         setBidAmount(response.data.minAllowedBid);
       }
     } catch (err) {
-      setError('Failed to load auction');
+      setLoadError('Failed to load auction');
     } finally {
       setLoading(false);
     }
@@ -66,10 +91,16 @@ const AuctionDetailPage = () => {
   const [extendDays, setExtendDays] = useState(1);
 
   const handleExtend = async () => {
-    if (!window.confirm(`Extending the auction by ${extendDays} day(s) will cost ₹100 extension fee. Proceed?`)) return;
+    const confirmed = await showConfirm({
+      title: 'Extend Auction Duration',
+      message: `Extending the auction by ${extendDays} day(s) will cost ₹${extendDays * 100} extension fee. Proceed?`,
+      confirmText: 'Extend Auction',
+      confirmVariant: 'warning'
+    });
+    if (!confirmed) return;
     try {
-      const response = await api.post(`/auctions/${id}/extend`);
-      triggerSuccess(`${response.data.message}. Fee paid: ₹${response.data.auction.feePaid}`);
+      await api.post(`/auctions/${id}/extend`, { days: extendDays });
+      triggerSuccess(`Auction extended by ${extendDays} day(s)`);
       fetchAuction();
     } catch (err) {
       setError(err.response?.data?.message || 'Extension failed');
@@ -80,77 +111,80 @@ const AuctionDetailPage = () => {
     fetchAuction();
     fetchBidHistory();
     fetchParticipants();
-  }, [fetchAuction, fetchBidHistory, fetchParticipants]);
 
-  useEffect(() => {
     const socket = io('http://localhost:3001');
+    socket.emit('joinAuction', id);
 
-    socket.on('bidPlaced', (data) => {
-      if (data.auctionId === id) {
-        setAuction(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            currentHighestBid: data.currentHighestBid,
-            winnerId: data.winnerId,
-            endDate: data.endDate,
-            minAllowedBid: data.currentHighestBid + 100,
-            participantsCount: prev.participantsCount
-          };
-        });
-        if (data.bid) {
-          setBidHistory(prev => [data.bid, ...prev]);
-        } else if (data.refreshHistory) {
-          fetchBidHistoryRef.current();
-        }
+    socket.on('bidUpdated', (data) => {
+      setAuction(prev => prev ? {
+        ...prev,
+        currentHighestBid: data.currentHighestBid,
+        minAllowedBid: data.minAllowedBid,
+        endDate: data.endDate || prev.endDate,
+        winner: data.winner || prev.winner,
+      } : prev);
+
+      fetchBidHistoryRef.current();
+
+      if (data.minAllowedBid) {
+        setBidAmount(data.minAllowedBid);
       }
+    });
+
+    socket.on('auctionCompleted', (data) => {
+      setAuction(prev => prev ? {
+        ...prev,
+        status: 'COMPLETED',
+        winner: data.winner,
+        currentHighestBid: data.winningBid || prev.currentHighestBid,
+      } : prev);
+      fetchBidHistoryRef.current();
     });
 
     socket.on('auctionExtended', (data) => {
-      if (data.auctionId === id) {
-        setAuction(prev => {
-          if (!prev) return prev;
-          return { ...prev, endDate: data.endDate };
-        });
-      }
+      setAuction(prev => prev ? {
+        ...prev,
+        endDate: data.endDate,
+      } : prev);
     });
 
-    socket.on('participantsUpdated', (data) => {
-      if (data.auctionId === id) {
-        setAuction(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            participantsCount: data.participantsCount,
-            status: data.isClosed ? 'Closed' : prev.status
-          };
-        });
-        fetchParticipants();
-      }
-    });
-
-    return () => socket.disconnect();
-  }, [id, fetchParticipants]);
+    return () => {
+      socket.emit('leaveAuction', id);
+      socket.disconnect();
+    };
+  }, [id, fetchAuction, fetchParticipants]);
 
   useEffect(() => {
-    if (!auction) return;
+    if (!auction?.endDate) return;
     const calculateTime = () => {
-      const now = new Date();
-      const end = new Date(auction.endDate);
-      const diff = end - now;
-      
+      if (auction.status && auction.status !== 'ACTIVE') {
+        setTimeLeft(auction.status);
+        setIsUrgent(false);
+        return true;
+      }
+
+      const diff = new Date(auction.endDate).getTime() - Date.now();
       if (diff <= 0) {
-        if (timeLeft !== 'Closed') {
-          setTimeLeft('Closed');
-          setIsUrgent(false);
-          fetchAuction();
-        }
+        setTimeLeft('Auction Ended');
+        setIsUrgent(false);
+        fetchAuction();
         return true;
       } else {
-        const hours = Math.floor(diff / (1000 * 60 * 60)).toString().padStart(2, '0');
-        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)).toString().padStart(2, '0');
-        const seconds = Math.floor((diff % (1000 * 60)) / 1000).toString().padStart(2, '0');
-        setTimeLeft(`${hours}:${minutes}:${seconds}`);
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+        let formatted = '';
+        if (days > 0) {
+          formatted = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+        } else if (hours > 0) {
+          formatted = `${hours}h ${minutes}m ${seconds}s`;
+        } else {
+          formatted = `${minutes}m ${seconds}s`;
+        }
+
+        setTimeLeft(formatted);
         setIsUrgent(diff < 3600000);
         return false;
       }
@@ -160,7 +194,7 @@ const AuctionDetailPage = () => {
       if (calculateTime()) clearInterval(timer);
     }, 1000);
     return () => clearInterval(timer);
-  }, [auction?.endDate, timeLeft, fetchAuction, auction]);
+  }, [auction?.endDate, auction?.status, fetchAuction]);
 
   const handleJoinToggle = async () => {
     const wasParticipated = auction.isParticipated;
@@ -174,12 +208,24 @@ const AuctionDetailPage = () => {
         setError('Cannot unjoin an auction in its final phase (last 5 minutes).');
         return;
       }
-      if (!window.confirm('Are you sure you want to unjoin this auction? Your entry fee will be refunded.')) return;
+      const confirmed = await showConfirm({
+        title: 'Unjoin Auction',
+        message: 'Are you sure you want to unjoin this auction? Your entry fee will be refunded.',
+        confirmText: 'Unjoin',
+        confirmVariant: 'warning'
+      });
+      if (!confirmed) return;
     } else {
       const entryFeeMsg = auction.entryFee > 0 
         ? `Joining requires an entry fee of ₹${auction.entryFee}. Proceed?` 
         : 'Are you sure you want to join this auction?';
-      if (!window.confirm(entryFeeMsg)) return;
+      const confirmed = await showConfirm({
+        title: 'Join Auction',
+        message: entryFeeMsg,
+        confirmText: 'Join Now',
+        confirmVariant: 'primary'
+      });
+      if (!confirmed) return;
     }
 
     setAuction(prev => ({
@@ -193,13 +239,18 @@ const AuctionDetailPage = () => {
     try {
       if (wasParticipated) {
         await api.delete(`/join/${id}`);
+        fetchAuction();
         fetchParticipants();
         triggerSuccess('You unjoined the auction. Entry fee refunded.');
       } else {
-        await api.post(`/join`, { auctionId: id });
+        const res = await api.post(`/join`, { auctionId: id });
         fetchAuction();
         fetchParticipants();
-        triggerSuccess('Successfully joined the auction!');
+        if (res.data?.message === 'Already joined' || res.data?.joined) {
+          triggerSuccess('You have already joined this auction!');
+        } else {
+          triggerSuccess('Successfully joined the auction!');
+        }
       }
     } catch (err) {
       setAuction(prev => ({
@@ -217,11 +268,17 @@ const AuctionDetailPage = () => {
   };
 
   const handleIncreaseBid = async (increment) => {
-    if (!window.confirm(`Are you sure you want to increase your bid by ₹${increment}?`)) return;
+    const confirmed = await showConfirm({
+      title: 'Increase Bid Amount',
+      message: `Are you sure you want to increase your bid by ₹${increment}?`,
+      confirmText: 'Place Higher Bid',
+      confirmVariant: 'primary'
+    });
+    if (!confirmed) return;
     try {
       await api.post('/buyer/increase-bid', { auctionId: id, increment });
       fetchAuction(); 
-      triggerSuccess(`Congratulations! You successfully increased your bid by ₹${increment} 🎉`);
+      triggerSuccess(`Successfully increased your bid by ₹${increment}`);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to increase bid');
     }
@@ -230,17 +287,23 @@ const AuctionDetailPage = () => {
     try {
       const res = await api.post(`/watchlist/${id}/toggle`);
       setAuction(prev => ({ ...prev, isWatchlisted: res.data.isWatchlisted }));
-      triggerSuccess(res.data.isWatchlisted ? 'Added to Watchlist! ❤️' : 'Removed from Watchlist! 🤍');
+      triggerSuccess(res.data.isWatchlisted ? 'Saved to Watchlist' : 'Removed from Watchlist');
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to toggle watchlist');
     }
   };
 
   const handleBuyNow = async () => {
-    if (!window.confirm(`Are you sure you want to purchase this item immediately for ₹${auction.buyNowPrice?.toLocaleString()}?`)) return;
+    const confirmed = await showConfirm({
+      title: 'Buy Now Confirmation',
+      message: `Are you sure you want to purchase this item immediately for ₹${auction.buyNowPrice?.toLocaleString()}?`,
+      confirmText: 'Buy Now',
+      confirmVariant: 'success'
+    });
+    if (!confirmed) return;
     try {
       await api.post(`/auctions/${id}/buynow`);
-      triggerSuccess('Congratulations! You purchased the item successfully via Buy Now 🎉');
+      triggerSuccess('Congratulations! You purchased the item via Buy Now');
       fetchAuction();
       fetchBidHistory();
     } catch (err) {
@@ -254,313 +317,362 @@ const AuctionDetailPage = () => {
       setError(`Bid must be at least ₹${auction.minAllowedBid}`);
       return;
     }
-    if (!window.confirm(`Are you sure you want to place a bid of ₹${amount}?`)) return;
+    const confirmed = await showConfirm({
+      title: 'Confirm Your Bid',
+      message: `Are you sure you want to place a bid of ₹${amount}?`,
+      confirmText: 'Confirm Bid',
+      confirmVariant: 'primary'
+    });
+    if (!confirmed) return;
     try {
-      await api.post('/bid', { auctionId: id, amount });
+      await api.post('/bid', { auctionId: id, bidAmount: amount });
+      triggerSuccess(`Bid of ₹${amount} placed successfully!`);
       setBidAmount('');
       fetchAuction();
       fetchBidHistory();
-      triggerSuccess(`Congratulations! Your bid of ₹${amount} was placed successfully! 🏆`);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to place bid');
     }
   };
 
-  if (loading) return <div className="page-shell"><p>Loading auction details...</p></div>;
-  if (error) return <div className="page-shell"><p className="error-text">{error} <button onClick={() => setError('')} className="text-button">Dismiss</button></p></div>;
-  if (!auction) return <div className="page-shell"><p className="error-text">Auction not found</p></div>;
+  if (loading) return (
+    <div className="page-shell">
+      <div className="loading-box">
+        <div className="loading-spinner" />
+        <p>Loading auction details...</p>
+      </div>
+    </div>
+  );
+
+  if (loadError || !auction) return (
+    <div className="page-shell">
+      <div className="empty-results-box">
+        <AlertCircle size={40} className="empty-icon-svg" />
+        <h3>Auction Not Found</h3>
+        <p>{loadError || 'The requested auction does not exist.'}</p>
+      </div>
+    </div>
+  );
 
   const isLive   = auction.status === 'ACTIVE';
-  const winnerName = auction.winnerId?.name || (typeof auction.winnerId === 'string' ? 'Loading...' : null);
   const isPremium  = auction.listingType === 'PREMIUM';
+  const winnerName = auction.winner ? (typeof auction.winner === 'object' ? auction.winner.name : 'Winner') : null;
 
-  const isFinalPhase = new Date(auction.endDate).getTime() - Date.now() <= 300000;
-  const disableUnjoin = !!auction.userBid || isFinalPhase;
-  const unjoinTitle = auction.userBid 
-    ? "Cannot unjoin after placing a bid" 
-    : isFinalPhase 
-      ? "Cannot unjoin in final phase (last 5 mins)" 
-      : "Unjoin Auction";
+  const timeBeforeEnd = new Date(auction.endDate).getTime() - Date.now();
+  const disableUnjoin = Boolean(auction.userBid) || (timeBeforeEnd <= 300000);
+  let unjoinTitle = '';
+  if (auction.userBid) unjoinTitle = 'Cannot unjoin after placing a bid';
+  else if (timeBeforeEnd <= 300000) unjoinTitle = 'Cannot unjoin during final 5 minutes';
 
   return (
-    <div className="page-shell">
+    <div className="page-shell auction-detail-shell">
       {successMessage && (
         <div className="success-popup">
-          <div className="success-popup-icon">✨</div>
-          <div className="success-popup-text">{successMessage}</div>
+          <CheckCircle2 size={20} className="success-popup-icon" />
+          <span className="success-popup-text">{successMessage}</span>
         </div>
       )}
-      <div className="detail-grid">
-        <section className="detail-card">
-          <div className="detail-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
-              <h1 style={{ margin: 0 }}>
-                {isPremium && <span className="premium-star">⭐ </span>}
-                {auction.title}
-              </h1>
-              <div className="badge-row" style={{ marginTop: '0.5rem' }}>
-                {isPremium && <span className="status-pill premium-badge" style={{ backgroundColor: '#ffd700', color: '#000', fontWeight: 'bold' }}>PREMIUM</span>}
-                <span className={`status-pill status-${auction.status?.toLowerCase()}`}>
-                  {{
-                    ACTIVE:             '🔴 Live',
-                    SCHEDULED:          '🗓 Scheduled',
-                    PENDING_RESOLUTION: '⏳ Resolving…',
-                    COMPLETED:          '✅ Completed',
-                    UNSOLD:             '📦 Unsold',
-                    CANCELED:           '🚫 Canceled',
-                    DRAFT:              '📝 Draft',
-                  }[auction.status] || auction.status}
+
+      {error && (
+        <div className={`error-toast ${errorDismissing ? 'error-toast-exit' : ''}`}>
+          <div className="error-toast-accent" />
+          <AlertCircle size={22} className="error-toast-icon" />
+          <div className="error-toast-body">
+            <div className="error-toast-title">Notice</div>
+            <div className="error-toast-message">{error}</div>
+          </div>
+          <button className="error-toast-close" onClick={dismissError}>
+            ✕
+          </button>
+        </div>
+      )}
+
+      <div className="auction-detail-layout">
+        <div className="auction-main-col">
+          <article className="auction-primary-card">
+            <header className="auction-header-section">
+              <div className="auction-header-top">
+                <div className="auction-title-group">
+                  <h1 className="auction-main-title">
+                    {isPremium && <Sparkles size={22} style={{ color: '#f59e0b', marginRight: '8px', verticalAlign: 'middle' }} />}
+                    {auction.title}
+                  </h1>
+
+                  <div className="auction-badge-bar">
+                    <span className={`status-pill status-${auction.status?.toLowerCase()}`}>
+                      {isLive && <span className="pulse-dot" />}
+                      {{
+                        ACTIVE:             'Live',
+                        SCHEDULED:          'Scheduled',
+                        PENDING_RESOLUTION: 'Resolving',
+                        COMPLETED:          'Completed',
+                        UNSOLD:             'Unsold',
+                        CANCELED:           'Canceled',
+                        DRAFT:              'Draft',
+                      }[auction.status] || auction.status}
+                    </span>
+
+                    {isPremium && <span className="status-pill premium-badge">PREMIUM</span>}
+
+                    {auction.category && auction.category !== 'Other' && (
+                      <span className="metadata-pill category-pill">
+                        {auction.category}
+                      </span>
+                    )}
+
+                    {auction.condition && (
+                      <span className="metadata-pill condition-pill">
+                        {auction.condition.replace('_', ' ')}
+                      </span>
+                    )}
+
+                    {auction.isOwner && <span className="role-tag owner-tag">Your Auction</span>}
+                    {auction.isParticipated && <span className="role-tag participant-tag">Participated</span>}
+                  </div>
+                </div>
+
+                {isBuyer() && !auction.isOwner && (
+                  <button
+                    className={`watchlist-btn ${auction.isWatchlisted ? 'watchlisted' : ''}`}
+                    onClick={handleToggleWatchlist}
+                    title={auction.isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
+                    aria-label="Toggle Watchlist"
+                  >
+                    <Heart
+                      size={18}
+                      fill={auction.isWatchlisted ? "currentColor" : "none"}
+                      stroke="currentColor"
+                    />
+                    <span>{auction.isWatchlisted ? 'Saved' : 'Save'}</span>
+                  </button>
+                )}
+              </div>
+            </header>
+
+            {auction.picture && (
+              <div className="auction-image-frame">
+                <img 
+                  src={`http://localhost:3001${auction.picture}`} 
+                  alt={auction.title} 
+                  className="auction-hero-image"
+                />
+              </div>
+            )}
+
+            {auction.status === 'COMPLETED' && (
+              <div className={`status-banner ${auction.buyNowPurchased ? 'buynow-banner' : 'completed-banner'}`}>
+                <div className="banner-icon">
+                  {auction.buyNowPurchased ? <Zap size={28} /> : <Award size={28} />}
+                </div>
+                <div className="banner-content">
+                  <span className="banner-subtitle">
+                    {auction.buyNowPurchased ? 'Sold via Buy Now' : 'Auction Settled'}
+                  </span>
+                  <h3 className="banner-title">
+                    {auction.buyNowPurchased 
+                      ? `Purchased instantly by ${winnerName || 'Buyer'} for ₹${auction.currentHighestBid?.toLocaleString()}`
+                      : `Won by ${winnerName || 'Highest Bidder'} for ₹${auction.currentHighestBid?.toLocaleString()}`
+                    }
+                  </h3>
+                </div>
+                <div className="banner-amount">
+                  ₹{auction.currentHighestBid?.toLocaleString()}
+                </div>
+              </div>
+            )}
+
+            {auction.status === 'UNSOLD' && (
+              <div className="status-banner unsold-banner">
+                <div className="banner-icon"><Box size={28} /></div>
+                <div className="banner-content">
+                  <span className="banner-subtitle">Auction Ended</span>
+                  <h3 className="banner-title">Unsold — No bids were placed</h3>
+                </div>
+              </div>
+            )}
+
+            {auction.status === 'PENDING_RESOLUTION' && (
+              <div className="status-banner pending-banner">
+                <div className="banner-icon"><Clock size={28} /></div>
+                <div className="banner-content">
+                  <span className="banner-subtitle">Bidding Closed</span>
+                  <h3 className="banner-title">Resolving final settlement…</h3>
+                </div>
+              </div>
+            )}
+
+            {auction.status === 'CANCELED' && (
+              <div className="status-banner canceled-banner">
+                <div className="banner-icon"><AlertCircle size={28} /></div>
+                <div className="banner-content">
+                  <span className="banner-subtitle">Status</span>
+                  <h3 className="banner-title">This auction was canceled by the seller</h3>
+                </div>
+              </div>
+            )}
+
+            {auction.description && (
+              <div className="auction-description-box">
+                <h4 className="section-subtitle">Item Details</h4>
+                <p className="auction-description-text">{auction.description}</p>
+              </div>
+            )}
+
+            <div className="auction-info-grid">
+              <div className="info-tile highlight-tile">
+                <span className="info-label">Current Highest Bid</span>
+                <span className="info-value price-value">₹{auction.currentHighestBid?.toLocaleString() || '0'}</span>
+              </div>
+
+              {auction.buyNowPrice && (
+                <div className="info-tile buynow-tile">
+                  <span className="info-label">Buy Now Price</span>
+                  <span className="info-value buynow-value">
+                    <Zap size={16} style={{ display: 'inline', marginRight: '4px' }} />
+                    ₹{auction.buyNowPrice?.toLocaleString()}
+                  </span>
+                </div>
+              )}
+
+              <div className="info-tile">
+                <span className="info-label">Entry Fee</span>
+                <span className="info-value">
+                  {auction.entryFee > 0 ? `₹${auction.entryFee}` : 'Free'}
                 </span>
-                {auction.category && auction.category !== 'Other' && (
-                  <span className="status-pill" style={{ backgroundColor: 'rgba(99, 102, 241, 0.12)', color: '#6366f1', border: '1px solid rgba(99, 102, 241, 0.2)' }}>
-                    {auction.category}
-                  </span>
-                )}
-                {auction.condition && (
-                  <span className="status-pill" style={{ backgroundColor: 'rgba(14, 165, 233, 0.12)', color: '#0ea5e9', border: '1px solid rgba(14, 165, 233, 0.2)' }}>
-                    {auction.condition.replace('_', ' ')}
-                  </span>
-                )}
-                {auction.isOwner && <span className="nav-role-badge owner-badge">Your Auction</span>}
-                {auction.isParticipated && <span className="nav-role-badge participation-badge">Participated</span>}
+              </div>
+
+              {auction.userBid && (
+                <div className="info-tile user-bid-tile">
+                  <span className="info-label">Your Highest Bid</span>
+                  <span className="info-value user-bid-value">₹{auction.userBid?.toLocaleString()}</span>
+                </div>
+              )}
+
+              <div className="info-tile">
+                <span className="info-label">{isLive ? 'Time Remaining' : 'Ended At'}</span>
+                <span className={`info-value ${!isLive ? 'time-ended' : isUrgent ? 'time-urgent' : 'time-active'}`}>
+                  {isLive ? timeLeft : new Date(auction.endDate).toLocaleString()}
+                </span>
+              </div>
+
+              <div className="info-tile">
+                <span className="info-label">Participants</span>
+                <span className="info-value">
+                  {auction.endCondition === 'time' 
+                    ? auction.participantsCount 
+                    : `${auction.participantsCount} / ${auction.maxParticipants || 15}`
+                  }
+                </span>
               </div>
             </div>
-            {isBuyer() && !auction.isOwner && (
-              <button
-                className={`watchlist-heart-btn ${auction.isWatchlisted ? 'watchlisted' : ''}`}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.05)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '50%',
-                  width: '45px',
-                  height: '45px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.4rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s',
-                }}
-                onClick={handleToggleWatchlist}
-                title={auction.isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
-              >
-                {auction.isWatchlisted ? '❤️' : '🤍'}
-              </button>
-            )}
-          </div>
-          
-          {auction.picture && (
-            <div className="detail-image-container">
-              <img 
-                src={`http://localhost:3001${auction.picture}`} 
-                alt={auction.title} 
-                className="detail-product-image"
-              />
-            </div>
-          )}
-          
-          {auction.status === 'COMPLETED' && (
-            <div className="winner-announcement stagger-entry">
-              <div className="winner-icon">🏆</div>
-              <div className="winner-info">
-                <h3>Auction Completed</h3>
-                <p>Winner: <strong>{winnerName || 'Unknown'}</strong> with ₹{auction.currentHighestBid?.toLocaleString()}</p>
-              </div>
-            </div>
-          )}
 
-          {auction.status === 'UNSOLD' && (
-            <div className="winner-announcement stagger-entry" style={{ background: 'rgba(100,116,139,0.15)' }}>
-              <div className="winner-icon">📦</div>
-              <div className="winner-info">
-                <h3>Auction Ended — No Bids</h3>
-                <p>This auction closed without any bids.</p>
-              </div>
-            </div>
-          )}
+            <BidChart bids={bidHistory} />
 
-          {auction.status === 'PENDING_RESOLUTION' && (
-            <div className="winner-announcement stagger-entry" style={{ background: 'rgba(234,179,8,0.15)' }}>
-              <div className="winner-icon">⏳</div>
-              <div className="winner-info">
-                <h3>Resolving Auction…</h3>
-                <p>Bidding has closed. The winner is being determined.</p>
-              </div>
-            </div>
-          )}
-
-          {auction.status === 'CANCELED' && (
-            <div className="winner-announcement stagger-entry" style={{ background: 'rgba(239,68,68,0.12)' }}>
-              <div className="winner-icon">🚫</div>
-              <div className="winner-info">
-                <h3>Auction Canceled</h3>
-                <p>This auction was canceled by the seller.</p>
-              </div>
-            </div>
-          )}
-
-          <p className="detail-description">{auction.description}</p>
-          <div className="detail-metrics">
-            <div>
-              <strong>Current Highest Bid</strong>
-              <p>₹{auction.currentHighestBid?.toLocaleString()}</p>
-            </div>
-
-            {auction.buyNowPrice && (
-              <div>
-                <strong>Buy Now Price</strong>
-                <p style={{ color: '#8b5cf6', fontWeight: 'bold' }}>⚡ ₹{auction.buyNowPrice?.toLocaleString()}</p>
-              </div>
-            )}
-
-            <div>
-              <strong>Entry Fee</strong>
-              <p style={{ color: auction.entryFee > 0 ? '#d97706' : '#16a34a', fontWeight: 'bold' }}>
-                {auction.entryFee > 0 ? `₹${auction.entryFee}` : 'Free'}
-              </p>
-            </div>
-
-            {auction.userBid && (
-              <div>
-                <strong>Your Highest Bid</strong>
-                <p className="user-bid-highlight">₹{auction.userBid}</p>
-              </div>
-            )}
-            <div>
-              <strong>{isLive ? 'Ends in' : 'Ended At'}</strong>
-              <p className={!isLive ? 'text-danger' : isUrgent ? 'text-urgent' : 'text-timer'}>
-                {isLive ? timeLeft : new Date(auction.endDate).toLocaleString()}
-              </p>
-            </div>
-
-            <div>
-              <strong>Participants</strong>
-              <p>
-                {auction.endCondition === 'time' 
-                  ? auction.participantsCount 
-                  : `${auction.participantsCount} / ${auction.maxParticipants || 15}`
-                }
-              </p>
-            </div>
-          </div>
-
-          <BidChart bids={bidHistory} />
-
-          {isLive && !auction.isOwner && isBuyer() && auction.buyNowPrice && (
-            <div className="buy-now-panel" style={{
-              background: 'linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(139, 92, 246, 0.05) 100%)',
-              border: '1px solid rgba(124, 58, 237, 0.3)',
-              borderRadius: '12px',
-              padding: '1.25rem',
-              marginBottom: '1.5rem',
-              textAlign: 'center'
-            }}>
-              <h4 style={{ margin: '0 0 0.5rem 0', color: '#a78bfa', fontSize: '1.1rem' }}>⚡ Instant Purchase Available</h4>
-              <p style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', opacity: 0.8 }}>Bypass bidding and claim this item instantly via secure ledger settlement.</p>
-              <button 
-                onClick={handleBuyNow} 
-                className="primary-button" 
-                style={{ 
-                  background: 'linear-gradient(90deg, #7c3aed 0%, #8b5cf6 100%)', 
-                  border: 'none', 
-                  padding: '0.75rem 2rem', 
-                  fontSize: '1.05rem',
-                  fontWeight: 'bold',
-                  boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)'
-                }}
-              >
-                Buy Now for ₹{auction.buyNowPrice?.toLocaleString()}
-              </button>
-            </div>
-          )}
-
-          {isLive && !auction.isOwner && !auction.isParticipated && isBuyer() && (
-            <button
-              onClick={handleJoinToggle}
-              className="action-toggle-button join-mode"
-            >
-              {auction.entryFee > 0 ? `Pay ₹${auction.entryFee} Entry Fee & Join` : 'Join Auction'}
-            </button>
-          )}
-
-          {isLive && auction.isParticipated && !auction.isOwner && isBuyer() && (
-            <div className="bid-panel">
-              <div className="bid-panel-header">
-                <h3>Bidding Dashboard</h3>
-                <button 
-                  onClick={handleJoinToggle} 
-                  className="text-button unjoin-text-button"
-                  disabled={disableUnjoin}
-                  title={unjoinTitle}
-                  style={disableUnjoin ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
-                >
-                  Unjoin Auction
+            {isLive && !auction.isOwner && isBuyer() && auction.buyNowPrice && (!auction.currentHighestBid || auction.currentHighestBid < 0.8 * auction.buyNowPrice) && (
+              <div className="buynow-action-box">
+                <div className="buynow-action-info">
+                  <h4>Instant Purchase Available</h4>
+                  <p>Skip bidding and secure this item immediately.</p>
+                </div>
+                <button onClick={handleBuyNow} className="buynow-confirm-btn">
+                  <Zap size={16} style={{ marginRight: '6px' }} />
+                  Buy Now for ₹{auction.buyNowPrice?.toLocaleString()}
                 </button>
               </div>
+            )}
 
-              <div className="increment-options">
-                <p>Quick Increase:</p>
-                <div className="increment-buttons">
-                  {(auction.bidIncrementOptions || [100, 500, 1000]).map(opt => (
-                    <button key={opt} onClick={() => handleIncreaseBid(opt)} className="increment-button">
-                      +₹{opt}
+            {isLive && !auction.isOwner && !auction.isParticipated && isBuyer() && (
+              <div className="join-action-box">
+                <button onClick={handleJoinToggle} className="btn-primary-action join-btn">
+                  {auction.entryFee > 0 ? `Pay ₹${auction.entryFee} Entry Fee & Join Auction` : 'Join Auction'}
+                </button>
+              </div>
+            )}
+
+            {isLive && auction.isParticipated && !auction.isOwner && isBuyer() && (
+              <div className="bidding-control-card">
+                <div className="control-card-header">
+                  <h3>
+                    <Gavel size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+                    Bidding Controls
+                  </h3>
+                  <button 
+                    onClick={handleJoinToggle} 
+                    className="unjoin-link-btn"
+                    disabled={disableUnjoin}
+                    title={unjoinTitle}
+                    style={disableUnjoin ? { opacity: 0.4, cursor: 'not-allowed' } : {}}
+                  >
+                    Unjoin Auction
+                  </button>
+                </div>
+
+                <div className="quick-increment-group">
+                  <span className="control-section-label">Quick Bid Increment</span>
+                  <div className="increment-pill-row">
+                    {(auction.bidIncrementOptions || [100, 500, 1000]).map(opt => (
+                      <button key={opt} onClick={() => handleIncreaseBid(opt)} className="quick-bid-btn">
+                        +₹{opt}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="custom-bid-group">
+                  <span className="control-section-label">Custom Bid Amount (Min: ₹{auction.minAllowedBid?.toLocaleString()})</span>
+                  <div className="custom-bid-input-row">
+                    <input
+                      type="number"
+                      value={bidAmount}
+                      onChange={(e) => setBidAmount(e.target.value)}
+                      placeholder={`e.g. ₹${auction.minAllowedBid}`}
+                      className="form-field custom-bid-field"
+                      min={auction.minAllowedBid}
+                    />
+                    <button onClick={handleBid} className="btn-primary-action">
+                      Place Bid
                     </button>
-                  ))}
+                  </div>
                 </div>
               </div>
+            )}
 
-              <div className="custom-bid">
-                <p className="min-bid-hint">Custom bid (Min: ₹{auction.minAllowedBid})</p>
-                <div className="bid-input-group">
-                  <input
-                    type="number"
-                    value={bidAmount}
-                    onChange={(e) => setBidAmount(e.target.value)}
-                    placeholder={`e.g. ${auction.minAllowedBid}`}
-                    className="form-field"
-                    min={auction.minAllowedBid}
-                  />
-                  <button onClick={handleBid} className="primary-button">Place Custom Bid</button>
+            {auction.isOwner && isLive && (
+              <div className="seller-panel-box">
+                <div className="seller-panel-header">
+                  <h3>Seller Management</h3>
+                  <span className="fee-notice-tag">Extension Fee: ₹100 / Day</span>
                 </div>
-              </div>
-            </div>
-          )}
-
-          {auction.isOwner && isLive && (
-            <div className="seller-management-panel glass-panel">
-              <div className="panel-header">
-                <h3>Seller Management</h3>
-                <span className="fee-notice">Extension fee: ₹100 / day</span>
-              </div>
-              
-              <div className="seller-actions">
-                <div className="custom-date-update">
-                  <p>Select days to extend (1-7):</p>
-                  <div className="date-input-group">
+                
+                <div className="seller-action-row">
+                  <span className="control-section-label">Extend Auction Duration:</span>
+                  <div className="extend-input-group">
                     <select 
                       value={extendDays}
                       onChange={(e) => setExtendDays(Number(e.target.value))}
-                      className="form-field date-picker"
+                      className="form-field extend-select"
                     >
                       {[1, 2, 3, 4, 5, 6, 7].map(d => (
                         <option key={d} value={d}>{d} Day{d > 1 ? 's' : ''}</option>
                       ))}
                     </select>
-                    <button onClick={handleExtend} className="primary-button update-date-btn">
-                      Confirm &amp; Extend (₹{extendDays * 100})
+                    <button onClick={handleExtend} className="btn-primary-action extend-confirm-btn">
+                      Extend ({extendDays}d — ₹{extendDays * 100})
                     </button>
                   </div>
                 </div>
               </div>
-            </div>
-          )}
-        </section>
+            )}
+          </article>
+        </div>
 
-        <aside className="sidebar-panels">
+        <aside className="auction-sidebar-col">
           <BidHistory bids={bidHistory} />
           <ParticipantsList participants={participants} />
         </aside>
       </div>
+
+      {ConfirmDialog}
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Users, Gavel } from 'lucide-react';
 import api from '../services/api';
 
 const AdminDashboard = () => {
@@ -29,7 +30,8 @@ const AdminDashboard = () => {
   return (
     <div className="page-shell">
       <div className="page-header">
-        <h1>Admin Dashboard</h1>
+        <h1>Admin Control Panel</h1>
+        <p className="page-subtitle">Platform user accounts, wallet settlements, and auction ledger</p>
       </div>
       <div className="seller-stats">
         <div className="stat-card"><strong>{users.length}</strong><span>Total Users</span></div>
@@ -37,10 +39,19 @@ const AdminDashboard = () => {
         <div className="stat-card"><strong>{auctions.filter(a => a.isActive).length}</strong><span>Active Auctions</span></div>
       </div>
       <div className="tab-bar">
-        <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>Users</button>
-        <button className={`tab-btn ${activeTab === 'auctions' ? 'active' : ''}`} onClick={() => setActiveTab('auctions')}>Auctions</button>
+        <button className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`} onClick={() => setActiveTab('users')}>
+          <Users size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Users
+        </button>
+        <button className={`tab-btn ${activeTab === 'auctions' ? 'active' : ''}`} onClick={() => setActiveTab('auctions')}>
+          <Gavel size={15} style={{ marginRight: '6px', verticalAlign: 'middle' }} /> Auctions
+        </button>
       </div>
-      {loading ? <p>Loading...</p> : activeTab === 'users' ? (
+      {loading ? (
+        <div className="loading-box">
+          <div className="loading-spinner" />
+          <p>Loading admin records...</p>
+        </div>
+      ) : activeTab === 'users' ? (
         <div className="admin-table-wrapper">
           <table className="admin-table">
             <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Wallet</th><th>Locked</th><th>Available</th></tr></thead>

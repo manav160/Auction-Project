@@ -1,11 +1,18 @@
 import React from 'react';
+import { Users } from 'lucide-react';
 
 const ParticipantsList = ({ participants }) => {
   if (!participants || participants.length === 0) {
     return (
       <div className="history-card">
-        <h3>Participants</h3>
-        <p style={{ color: '#94a3b8', textAlign: 'center', padding: '20px 0' }}>No participants yet</p>
+        <h3 style={{ margin: '0 0 16px' }}>Participants</h3>
+        <div className="empty-activity-box" style={{ textAlign: 'center', padding: '24px 16px' }}>
+          <div style={{ marginBottom: '6px', opacity: 0.8 }}>
+            <Users size={28} style={{ color: 'var(--text-muted)' }} />
+          </div>
+          <h4 style={{ margin: '0 0 4px', fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: '700' }}>No participants yet</h4>
+          <p style={{ margin: 0, fontSize: '0.82rem', color: 'var(--text-muted)' }}>Registered bidders will be listed here.</p>
+        </div>
       </div>
     );
   }
