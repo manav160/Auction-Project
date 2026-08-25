@@ -1,14 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { ShieldCheck, PackageSearch } from 'lucide-react';
 import api from '../services/api';
 import AuctionCard from '../components/AuctionCard';
 
 const STATUS_GROUPS = [
-  { key: 'ACTIVE',             label: '🔴 Live' },
-  { key: 'SCHEDULED',          label: '🗓 Scheduled' },
-  { key: 'PENDING_RESOLUTION', label: '⏳ Resolving' },
-  { key: 'COMPLETED',          label: '✅ Completed' },
-  { key: 'UNSOLD',             label: '📦 Unsold' },
-  { key: 'CANCELED',           label: '🚫 Canceled' },
+  { key: 'ACTIVE',             label: 'Live Auctions', isLive: true },
+  { key: 'SCHEDULED',          label: 'Scheduled Auctions' },
+  { key: 'PENDING_RESOLUTION', label: 'Resolving Settlement' },
+  { key: 'COMPLETED',          label: 'Completed Auctions' },
+  { key: 'UNSOLD',             label: 'Unsold Auctions' },
+  { key: 'CANCELED',           label: 'Canceled Auctions' },
 ];
 
 const normalizeStatus = (s) => {
@@ -26,7 +27,8 @@ const MyParticipationsPage = () => {
     const fetchMyParticipations = async () => {
       try {
         const res = await api.get('/participations/me');
-        setAuctions(res.data);
+        const data = res.data;
+        setAuctions(Array.isArray(data) ? data : (data?.participations || []));
       } catch (err) {
         console.error('Failed to load participations:', err);
       } finally {
@@ -39,14 +41,26 @@ const MyParticipationsPage = () => {
   return (
     <div className="page-shell">
       <div className="page-header">
-        <h1>My Participations</h1>
-        <p className="page-subtitle">Auctions you've joined</p>
+        <h1>
+          <ShieldCheck size={28} style={{ color: '#10b981', marginRight: '10px', verticalAlign: 'middle', display: 'inline' }} />
+          My Bids & Participations
+        </h1>
+        <p className="page-subtitle">Track live, completed, and joined auction events</p>
       </div>
 
-      {loading && <p>Loading...</p>}
+      {loading && (
+        <div className="loading-box">
+          <div className="loading-spinner" />
+          <p>Loading joined auctions...</p>
+        </div>
+      )}
 
       {!loading && auctions.length === 0 && (
-        <p>You haven't joined any auctions yet.</p>
+        <div className="empty-results-box">
+          <PackageSearch size={48} className="empty-icon-svg" />
+          <h3>No joined auctions</h3>
+          <p>You haven't participated in any live auctions yet.</p>
+        </div>
       )}
 
       {!loading && auctions.length > 0 && STATUS_GROUPS.map(group => {
@@ -54,7 +68,10 @@ const MyParticipationsPage = () => {
         if (grouped.length === 0) return null;
         return (
           <section key={group.key} className="auction-group">
-            <h2 className="auction-group-title">{group.label}</h2>
+            <h2 className="auction-group-title">
+              {group.isLive && <span className="pulse-dot" />}
+              {group.label}
+            </h2>
             <div className="auction-grid">
               {grouped.map(auction => <AuctionCard key={auction._id} auction={auction} />)}
             </div>

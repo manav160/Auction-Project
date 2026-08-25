@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Heart } from 'lucide-react';
 import api from '../services/api';
 import AuctionCard from '../components/AuctionCard';
 
@@ -11,7 +12,8 @@ const WatchlistPage = () => {
     try {
       setLoading(true);
       const res = await api.get('/watchlist');
-      setAuctions(res.data || []);
+      const data = res.data;
+      setAuctions(Array.isArray(data) ? data : (data?.auctions || data?.watchlist || []));
     } catch (err) {
       console.error(err);
       setError('Failed to load watchlist');
@@ -38,19 +40,25 @@ const WatchlistPage = () => {
   return (
     <div className="page-shell">
       <div className="page-header">
-        <h1>My Watchlist ❤️</h1>
-        <p className="page-subtitle">Track your favorite auctions and buy or bid before they end</p>
+        <h1>
+          <Heart size={28} style={{ color: '#ef4444', marginRight: '10px', verticalAlign: 'middle', display: 'inline' }} />
+          Saved Watchlist
+        </h1>
+        <p className="page-subtitle">Track your saved auctions and monitor price movements</p>
       </div>
 
       {error && <p className="error-text">{error}</p>}
       
       {loading ? (
-        <p>Loading watchlist...</p>
+        <div className="loading-box">
+          <div className="loading-spinner" />
+          <p>Loading watchlist...</p>
+        </div>
       ) : auctions.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '4rem 1rem' }}>
-          <span style={{ fontSize: '3rem' }}>🤍</span>
-          <p style={{ marginTop: '1rem', fontSize: '1.2rem', opacity: 0.8 }}>Your watchlist is empty.</p>
-          <p style={{ fontSize: '0.95rem', opacity: 0.6 }}>Browse live auctions and click the heart button to save them here.</p>
+        <div className="empty-results-box">
+          <Heart size={48} className="empty-icon-svg" />
+          <h3>Your watchlist is empty</h3>
+          <p>Browse live auctions and click the heart icon on any listing to save it here.</p>
         </div>
       ) : (
         <div className="auction-grid">

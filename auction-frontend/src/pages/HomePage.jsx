@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Search, SlidersHorizontal, Sparkles, RotateCcw, PackageSearch, Zap, ShieldCheck, TrendingUp, X } from 'lucide-react';
 import api from '../services/api';
 import AuctionCard from '../components/AuctionCard';
+import CustomSelect from '../components/CustomSelect';
 
 const CATEGORIES = ['Electronics', 'Collectibles', 'Fashion', 'Home', 'Motors', 'Other'];
 const CONDITIONS = [
@@ -31,6 +33,7 @@ const HomePage = () => {
 
   // Sidebar mode is active ONLY after user clicks "Apply Filters"
   const [isFilterApplied, setIsFilterApplied] = useState(false);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // Fetch function accepting explicit filter parameters
   const loadAuctions = useCallback(async (filtersToApply = null, pageNum = 1) => {
@@ -98,6 +101,7 @@ const HomePage = () => {
       sort,
     };
     setIsFilterApplied(true);
+    setShowMobileFilters(false);
     setPage(1);
     loadAuctions(activeFilters, 1);
   };
@@ -116,6 +120,7 @@ const HomePage = () => {
     setSort('newest');
     setPage(1);
     setIsFilterApplied(false);
+    setShowMobileFilters(false);
     loadAuctions(null, 1);
   };
 
@@ -146,104 +151,204 @@ const HomePage = () => {
     }
   };
 
+  const isAnyFilterActive = isFilterApplied || Boolean(search || status || category || condition || listingType || entryFeeType || hasBuyNow || minPrice || maxPrice);
+
   return (
-    <div className="page-shell">
-      <div className="page-header" style={{ marginBottom: '2rem' }}>
-        <h1>Explore Marketplace</h1>
-        <p className="page-subtitle">Discover, bid, or buy instantly with verified ledger settlements</p>
+    <div className="page-shell marketplace-shell">
+      {/* Hero Marketplace Banner */}
+      <div className="hero-marketplace-banner">
+        <div className="hero-banner-content">
+          <div className="hero-badge">
+            <Sparkles size={14} className="hero-badge-icon" />
+            <span>Next-Gen Auction Ledger</span>
+          </div>
+          <h1>Discover & Bid on Exclusive Auctions</h1>
+          <p className="hero-subtitle">
+            Real-time anti-snipe bidding, instant settlements, and verified marketplace listings.
+          </p>
+
+          <div className="hero-stats-row">
+            <div className="hero-stat-item">
+              <span className="hero-stat-val">
+                <span className="pulse-dot" /> Live
+              </span>
+              <span className="hero-stat-lbl">Real-time Bidding</span>
+            </div>
+            <div className="hero-stat-item">
+              <span className="hero-stat-val">
+                <ShieldCheck size={16} style={{ color: '#10b981', display: 'inline', marginRight: '4px' }} /> Verified
+              </span>
+              <span className="hero-stat-lbl">Ledger Escrow</span>
+            </div>
+            <div className="hero-stat-item">
+              <span className="hero-stat-val">
+                <Zap size={16} style={{ color: '#8b5cf6', display: 'inline', marginRight: '4px' }} /> Instant
+              </span>
+              <span className="hero-stat-lbl">Buy Now Option</span>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className={`marketplace-layout ${isFilterApplied ? 'sidebar-active' : 'hero-active'}`}>
-        
-        {/* Animated Filter Card */}
-        <aside className="filter-panel-card panel-card">
-          <div className="panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h3>{isFilterApplied ? 'Filters Applied' : 'Find Auctions'}</h3>
-            {isFilterApplied && (
-              <button className="text-button" onClick={clearFilters} style={{ fontSize: '0.85rem' }}>Reset All</button>
+      <div className="marketplace-layout">
+        {/* Mobile Filter Drawer Toggle Button */}
+        <div className="mobile-filter-bar">
+          <button
+            type="button"
+            className="mobile-filter-btn"
+            onClick={() => setShowMobileFilters(!showMobileFilters)}
+          >
+            <SlidersHorizontal size={18} />
+            <span>{isAnyFilterActive ? 'Filters Active' : 'Filter Auctions'}</span>
+          </button>
+        </div>
+
+        {/* Sticky Filter Sidebar */}
+        <aside className={`filter-panel-card panel-card ${showMobileFilters ? 'mobile-filters-open' : ''}`}>
+          <div className="panel-header">
+            <h3>
+              <SlidersHorizontal size={18} style={{ marginRight: '8px', verticalAlign: 'middle' }} />
+              Find Auctions
+            </h3>
+            {showMobileFilters && (
+              <button type="button" className="mobile-filter-close" onClick={() => setShowMobileFilters(false)}>
+                <X size={18} />
+              </button>
+            )}
+            {isAnyFilterActive && (
+              <button type="button" className="text-button reset-link" onClick={clearFilters}>
+                <RotateCcw size={13} style={{ marginRight: '4px' }} /> Reset
+              </button>
             )}
           </div>
           
           <form onSubmit={handleApplyFilters} className="filter-scroll-container">
             <div className="form-group">
               <label className="form-label">Search Query</label>
-              <input
-                type="text"
-                placeholder="Type title or keyword..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="form-field search-input-glow"
-              />
+              <div className="input-with-icon">
+                <Search size={16} className="field-icon" />
+                <input
+                  type="text"
+                  placeholder="Title or keyword..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="form-field search-input-glow"
+                />
+              </div>
             </div>
 
             <div className="form-group">
               <label className="form-label">Category</label>
-              <select value={category} onChange={(e) => setCategory(e.target.value)} className="form-field">
-                <option value="">All Categories</option>
+              <div className="category-filter-rail">
+                <button
+                  type="button"
+                  className={`category-chip ${category === '' ? 'active' : ''}`}
+                  onClick={() => setCategory('')}
+                >
+                  All
+                </button>
                 {CATEGORIES.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                  <button
+                    key={cat}
+                    type="button"
+                    className={`category-chip ${category === cat ? 'active' : ''}`}
+                    onClick={() => setCategory(cat)}
+                  >
+                    {cat}
+                  </button>
                 ))}
-              </select>
+              </div>
             </div>
 
             <div className="form-group">
               <label className="form-label">Condition</label>
-              <select value={condition} onChange={(e) => setCondition(e.target.value)} className="form-field">
-                <option value="">Any Condition</option>
-                {CONDITIONS.map(cond => (
-                  <option key={cond.value} value={cond.value}>{cond.label}</option>
-                ))}
-              </select>
+              <CustomSelect
+                options={[
+                  { value: '', label: 'Any Condition' },
+                  ...CONDITIONS.map(cond => ({ value: cond.value, label: cond.label }))
+                ]}
+                value={condition}
+                onChange={(val) => setCondition(val)}
+                placeholder="Any Condition"
+              />
             </div>
 
             <div className="form-group">
               <label className="form-label">Listing Tier</label>
-              <select value={listingType} onChange={(e) => setListingType(e.target.value)} className="form-field">
-                <option value="">All Tiers</option>
-                <option value="STANDARD">Standard Tier</option>
-                <option value="PREMIUM">⭐ Premium Tier</option>
-              </select>
+              <CustomSelect
+                options={[
+                  { value: '', label: 'All Tiers' },
+                  { value: 'STANDARD', label: 'Standard Tier' },
+                  { value: 'PREMIUM', label: 'Premium Tier' }
+                ]}
+                value={listingType}
+                onChange={(val) => setListingType(val)}
+                placeholder="All Tiers"
+              />
             </div>
 
             <div className="form-group">
               <label className="form-label">Status</label>
-              <select value={status} onChange={(e) => setStatus(e.target.value)} className="form-field">
-                <option value="">All Active / Live</option>
-                <option value="closed">Closed / Ended</option>
-                <option value="all">All Listings</option>
-              </select>
+              <div className="status-segmented-control">
+                <button
+                  type="button"
+                  className={`segment-btn ${status === '' ? 'active' : ''}`}
+                  onClick={() => setStatus('')}
+                >
+                  Live
+                </button>
+                <button
+                  type="button"
+                  className={`segment-btn ${status === 'closed' ? 'active' : ''}`}
+                  onClick={() => setStatus('closed')}
+                >
+                  Ended
+                </button>
+                <button
+                  type="button"
+                  className={`segment-btn ${status === 'all' ? 'active' : ''}`}
+                  onClick={() => setStatus('all')}
+                >
+                  All
+                </button>
+              </div>
             </div>
 
             <div className="form-group">
               <label className="form-label">Entry Fee Type</label>
-              <select value={entryFeeType} onChange={(e) => setEntryFeeType(e.target.value)} className="form-field">
-                <option value="">Any Entry Fee</option>
-                <option value="FREE">Free Entry</option>
-                <option value="PAID">Paid Entry Only</option>
-              </select>
+              <CustomSelect
+                options={[
+                  { value: '', label: 'Any Entry Fee' },
+                  { value: 'FREE', label: 'Free Entry' },
+                  { value: 'PAID', label: 'Paid Entry Only' }
+                ]}
+                value={entryFeeType}
+                onChange={(val) => setEntryFeeType(val)}
+                placeholder="Any Entry Fee"
+              />
             </div>
 
-            <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', margin: '0.5rem 0' }}>
+            <div className="form-group checkbox-group">
               <input
                 type="checkbox"
                 id="buyNowCheck"
                 checked={hasBuyNow}
                 onChange={(e) => setHasBuyNow(e.target.checked)}
-                style={{ cursor: 'pointer', width: '18px', height: '18px' }}
               />
-              <label htmlFor="buyNowCheck" style={{ cursor: 'pointer', fontWeight: 'bold' }}>⚡ Has Buy Now Price</label>
+              <label htmlFor="buyNowCheck" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                <Zap size={14} style={{ color: '#8b5cf6' }} /> Has Buy Now Price
+              </label>
             </div>
 
             <div className="form-group">
               <label className="form-label">Price Range</label>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div className="price-input-row">
                 <input
                   type="number"
                   placeholder="Min ₹"
                   value={minPrice}
                   onChange={(e) => setMinPrice(e.target.value)}
                   className="form-field"
-                  style={{ flex: 1 }}
                 />
                 <input
                   type="number"
@@ -251,72 +356,72 @@ const HomePage = () => {
                   value={maxPrice}
                   onChange={(e) => setMaxPrice(e.target.value)}
                   className="form-field"
-                  style={{ flex: 1 }}
                 />
               </div>
             </div>
 
-            <div className="form-group">
-              <label className="form-label">Sort By</label>
-              <select value={sort} onChange={(e) => setSort(e.target.value)} className="form-field">
-                <option value="newest">Newest Listed</option>
-                <option value="ending-soon">Ending Soonest</option>
-                <option value="highest-bid">Highest Current Bid</option>
-                <option value="buy-now-asc">Buy Now Price: Low to High</option>
-                <option value="buy-now-desc">Buy Now Price: High to Low</option>
-                <option value="most-participants">Most Participants</option>
-              </select>
-            </div>
-
-            <div className="form-group" style={{ marginTop: '1rem' }}>
-              <button
-                type="submit"
-                className="primary-button"
-                style={{
-                  width: '100%',
-                  padding: '0.85rem',
-                  fontSize: '0.95rem',
-                  fontWeight: 'bold',
-                  background: 'linear-gradient(90deg, #7c3aed 0%, #2563eb 100%)',
-                  border: 'none',
-                  borderRadius: '12px',
-                  cursor: 'pointer',
-                  boxShadow: '0 4px 15px rgba(124, 58, 237, 0.3)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '0.5rem',
-                  color: '#fff',
-                  transition: 'all 0.2s'
-                }}
-              >
-                <span> Apply Filters </span>
+            <div className="filter-actions-group">
+              <button type="submit" className="btn-primary-action apply-filters-btn">
+                Apply Filters
               </button>
+
+              {isAnyFilterActive && (
+                <button type="button" className="btn-secondary-action reset-filters-btn" onClick={clearFilters}>
+                  Reset Filters
+                </button>
+              )}
             </div>
           </form>
         </aside>
 
-        {/* Dynamic Results Section (RHS) */}
+        {/* Dynamic Results Section */}
         <section className="results-panel">
-          <div className="results-header" style={{ marginBottom: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <h2 style={{ margin: 0, fontSize: '1.4rem' }}>
+          <div className="results-header">
+            <h2 className="results-title">
               {isFilterApplied ? 'Filtered Results' : 'Ongoing Live Auctions'}
             </h2>
-            <span className="live-indicator-tag">🔴 Live Now</span>
+
+            <div className="results-sort-bar">
+              <span className="sort-label">Sort:</span>
+              <CustomSelect
+                options={[
+                  { value: 'newest', label: 'Newly Listed' },
+                  { value: 'ending-soon', label: 'Ending Soon' },
+                  { value: 'highest-bid', label: 'Highest Current Bid' },
+                  { value: 'buy-now-asc', label: 'Buy Now: Low to High' },
+                  { value: 'buy-now-desc', label: 'Buy Now: High to Low' },
+                  { value: 'most-participants', label: 'Most Participants' }
+                ]}
+                value={sort}
+                onChange={(val) => {
+                  setSort(val);
+                  if (isFilterApplied) {
+                    loadAuctions({ search, status, category, condition, listingType, entryFeeType, hasBuyNow, minPrice, maxPrice, sort: val }, page);
+                  } else {
+                    loadAuctions({ sort: val }, page);
+                  }
+                }}
+                className="sort-dropdown"
+              />
+            </div>
           </div>
 
-          {error && <p className="error-text" style={{ marginBottom: '1rem' }}>{error}</p>}
+          {error && <p className="error-text">{error}</p>}
           
           {loading ? (
-            <p>Loading auctions...</p>
+            <div className="loading-box">
+              <div className="loading-spinner" />
+              <p>Loading active auctions...</p>
+            </div>
           ) : auctions.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '4rem 1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '16px', border: '1px dashed rgba(255,255,255,0.08)' }}>
-              <span style={{ fontSize: '2.5rem' }}>📦</span>
-              <p style={{ marginTop: '1rem', fontSize: '1.1rem', opacity: 0.8 }}>
-                {isFilterApplied ? 'No auctions match your filters.' : 'No active ongoing auctions at the moment.'}
-              </p>
-              {isFilterApplied && (
-                <button className="text-button" onClick={clearFilters} style={{ marginTop: '0.5rem' }}>Reset Filters</button>
+            <div className="empty-results-box">
+              <PackageSearch size={48} className="empty-icon-svg" />
+              <h3>No auctions found</h3>
+              <p>Try adjusting your search criteria or resetting filters.</p>
+              {isAnyFilterActive && (
+                <button className="btn-secondary-action clear-empty-btn" onClick={clearFilters}>
+                  Clear Filters
+                </button>
               )}
             </div>
           ) : (
@@ -333,23 +438,21 @@ const HomePage = () => {
 
               {/* Pagination Controls */}
               {pagination.pages > 1 && (
-                <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '1rem', marginTop: '2rem', padding: '1rem' }}>
+                <div className="pagination-bar">
                   <button
                     onClick={() => handlePageChange(Math.max(1, page - 1))}
                     disabled={page === 1}
-                    className="secondary-button"
-                    style={{ padding: '0.5rem 1rem', width: 'auto' }}
+                    className="pagination-btn"
                   >
                     ← Previous
                   </button>
-                  <span style={{ fontWeight: 'bold' }}>
+                  <span className="page-indicator">
                     Page {page} of {pagination.pages}
                   </span>
                   <button
                     onClick={() => handlePageChange(Math.min(pagination.pages, page + 1))}
                     disabled={page === pagination.pages}
-                    className="secondary-button"
-                    style={{ padding: '0.5rem 1rem', width: 'auto' }}
+                    className="pagination-btn"
                   >
                     Next →
                   </button>
@@ -364,3 +467,4 @@ const HomePage = () => {
 };
 
 export default HomePage;
+

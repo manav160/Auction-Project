@@ -1,19 +1,22 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { Plus, X } from 'lucide-react';
 import api from '../services/api';
 import AuctionForm from '../components/AuctionForm';
 import AuctionCard from '../components/AuctionCard';
+import { useConfirm } from '../utils/useConfirm';
 
 // Groups that match our backend status enum
 const STATUS_GROUPS = [
-  { key: 'SCHEDULED',          label: '🗓 Scheduled',          emptyMsg: 'No scheduled auctions.' },
-  { key: 'ACTIVE',             label: '🔴 Live',               emptyMsg: null },
-  { key: 'PENDING_RESOLUTION', label: '⏳ Resolving',          emptyMsg: null },
-  { key: 'COMPLETED',          label: '✅ Completed',          emptyMsg: null },
-  { key: 'UNSOLD',             label: '📦 Unsold',             emptyMsg: null },
-  { key: 'CANCELED',           label: '🚫 Canceled',           emptyMsg: null },
+  { key: 'SCHEDULED',          label: 'Scheduled',          emptyMsg: 'No scheduled auctions.' },
+  { key: 'ACTIVE',             label: 'Live',               emptyMsg: null, isLive: true },
+  { key: 'PENDING_RESOLUTION', label: 'Resolving',          emptyMsg: null },
+  { key: 'COMPLETED',          label: 'Completed',          emptyMsg: null },
+  { key: 'UNSOLD',             label: 'Unsold',             emptyMsg: null },
+  { key: 'CANCELED',           label: 'Canceled',           emptyMsg: null },
 ];
 
 const SellerDashboard = () => {
+  const { showConfirm, ConfirmDialog } = useConfirm();
   const [auctions, setAuctions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -35,7 +38,13 @@ const SellerDashboard = () => {
   useEffect(() => { fetchMyAuctions(); }, [fetchMyAuctions]);
 
   const handleExtend = async (auctionId) => {
-    if (!window.confirm('Extend this auction by 1 day?')) return;
+    const confirmed = await showConfirm({
+      title: 'Extend Auction',
+      message: 'Extend this auction by 1 day? An extension fee of ₹100 will apply.',
+      confirmText: 'Extend 1 Day',
+      confirmVariant: 'warning'
+    });
+    if (!confirmed) return;
     try {
       await api.post(`/extend/${auctionId}`);
       fetchMyAuctions();
@@ -45,7 +54,13 @@ const SellerDashboard = () => {
   };
 
   const handleClose = async (auctionId) => {
-    if (!window.confirm('Are you sure you want to cancel this auction?')) return;
+    const confirmed = await showConfirm({
+      title: 'Cancel Auction',
+      message: 'Are you sure you want to cancel this auction? This action cannot be undone.',
+      confirmText: 'Cancel Auction',
+      confirmVariant: 'danger'
+    });
+    if (!confirmed) return;
     try {
       await api.post(`/auctions/${auctionId}/close`);
       fetchMyAuctions();
@@ -98,20 +113,27 @@ const SellerDashboard = () => {
       <button
         className="primary-button toggle-form-btn"
         onClick={() => setShowForm(!showForm)}
+        style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
       >
-        {showForm ? '✕ Cancel' : '+ Create New Auction'}
+        {showForm ? <X size={16} /> : <Plus size={16} />}
+        <span>{showForm ? 'Cancel Creation' : 'Create New Auction'}</span>
       </button>
 
       {showForm && (
         <AuctionForm onAuctionCreated={() => { fetchMyAuctions(); setShowForm(false); }} />
       )}
 
-
+      {error && <div className="error-alert" style={{ marginBottom: '1rem', color: '#ef4444' }}>{error}</div>}
 
       {loading ? (
-        <p>Loading your auctions...</p>
+        <div className="loading-box">
+          <div className="loading-spinner" />
+          <p>Loading your auctions...</p>
+        </div>
       ) : auctions.length === 0 ? (
-        <p>You haven't created any auctions yet.</p>
+        <div className="empty-results-box">
+          <p>You haven't created any auctions yet.</p>
+        </div>
       ) : (
         <>
           {STATUS_GROUPS.map(group => {
@@ -119,7 +141,10 @@ const SellerDashboard = () => {
             if (group_auctions.length === 0) return null;
             return (
               <section key={group.key} className="auction-group">
-                <h2 className="auction-group-title">{group.label}</h2>
+                <h2 className="auction-group-title">
+                  {group.isLive && <span className="pulse-dot" />}
+                  {group.label}
+                </h2>
                 <div className="auction-grid">
                   {group_auctions.map(auction => {
                     const norm = normalizeStatus(auction.status);
@@ -142,6 +167,7 @@ const SellerDashboard = () => {
           })}
         </>
       )}
+      {ConfirmDialog}
     </div>
   );
 };
