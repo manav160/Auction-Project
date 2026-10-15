@@ -5,52 +5,57 @@ const WalletService = require('./walletService');
 const Transaction = require('../models/Transaction');
 
 class BiddingService {
-  /**
-   * Place a bid using an atomic conditional update with retry logic.
-   *
-   * Concurrency guarantees:
-   * - findOneAndUpdate({ currentHighestBid: { $lt: amount } }) enforces that only
-   *   a strictly higher bid can update the auction — at the database level.
-   * - Equal bids: first-accepted-wins ($lt rejects equal amounts).
-   * - bids[], currentHighestBid, and winnerId are updated in a single atomic op.
-   * - WriteConflict (two transactions touching the same auction doc) is retried
-   *   with exponential backoff. On retry, the auction state is re-read so the
-   *   correct previousWinner is refunded.
-   */
-
   static MAX_RETRIES = 5;
 
-  /**
-   * Public entry point. Performs idempotency check, static validations,
-   * then delegates to the retryable transaction loop.
-   */
-  static async placeBid({ auctionId, userId, amount, idempotencyKey = null }) {
-    // ---------------------------------------------------------------
-    // IDEMPOTENCY CHECK — must come FIRST, before any validation
-    // so that a retry of an already-committed bid returns immediately
-    // even if the user is now the highest bidder.
-    // ---------------------------------------------------------------
-    const bidKey = idempotencyKey || `bid-lock-${auctionId}-${amount}-${userId}`;
-    const existingTx = await Transaction.findOne({ idempotencyKey: bidKey });
-    if (existingTx) {
-      const currentAuction = await Auction.findById(auctionId);
-      const existingBid = (currentAuction.bids || []).find(
-        b => b.userId.toString() === userId.toString() && b.amount === amount
-      );
-      return {
-        auction: currentAuction,
-        bid: existingBid || currentAuction.bids[currentAuction.bids.length - 1]
-      };
+  static async placeBid({
+    auctionId,
+    userId,
+    amount = null,
+    increment = null,
+    idempotencyKey = null
+  }) {
+    if (amount == null && increment == null) {
+      throw new Error('Bid amount or increment is required');
     }
 
-    // ---------------------------------------------------------------
-    // STATIC VALIDATIONS — these don't change between retries
-    // ---------------------------------------------------------------
-    const auctionSnapshot = await Auction.findById(auctionId).lean();
-    if (!auctionSnapshot) {
+    const bidAmount = amount != null ? Number(amount) : null;
+
+    const bidKey =
+      idempotencyKey ||
+      (bidAmount != null
+        ? `bid-lock-${auctionId}-${bidAmount}-${userId}`
+        : null);
+
+    // Prevent duplicate processing of the same request
+    if (bidKey) {
+      const existingTransaction = await Transaction.findOne({
+        idempotencyKey: bidKey
+      });
+
+      if (existingTransaction) {
+        const auction = await Auction.findById(auctionId);
+
+        const existingBid = auction.bids.find(
+          bid =>
+            bid.userId.toString() === userId.toString() &&
+            (bidAmount == null || bid.amount === bidAmount)
+        );
+
+        return {
+          auction,
+          bid: existingBid || auction.bids[auction.bids.length - 1]
+        };
+      }
+    }
+
+    // These validations don't need to be repeated on every retry
+    const auction = await Auction.findById(auctionId).lean();
+
+    if (!auction) {
       throw new Error('Auction not found');
     }
-    if (auctionSnapshot.sellerId.toString() === userId.toString()) {
+
+    if (auction.sellerId.toString() === userId.toString()) {
       throw new Error('You cannot bid on your own auction');
     }
 
@@ -58,171 +63,211 @@ class BiddingService {
       auctionId: new mongoose.Types.ObjectId(String(auctionId)),
       userId: new mongoose.Types.ObjectId(String(userId))
     });
+
     if (!participation) {
       throw new Error('You must join the auction before placing a bid');
     }
 
-    // ---------------------------------------------------------------
-    // RETRY LOOP — handles WriteConflict / TransientTransactionError
-    // When two bids hit the same auction document simultaneously inside
-    // transactions, MongoDB aborts one with WriteConflict. The retry
-    // re-reads the auction and re-evaluates with the latest state.
-    // ---------------------------------------------------------------
+    // Retry the transaction if MongoDB reports a concurrency conflict
     let lastError;
+
     for (let attempt = 0; attempt <= this.MAX_RETRIES; attempt++) {
       try {
         return await this._executeBidTransaction({
-          auctionId, userId, amount, bidKey,
-          auctionTitle: auctionSnapshot.title
+          auctionId,
+          userId,
+          amount: bidAmount,
+          increment: increment != null ? Number(increment) : null,
+          bidKey,
+          auctionTitle: auction.title,
+          attempt
         });
       } catch (error) {
         lastError = error;
 
-        if (this._isRetryableError(error) && attempt < this.MAX_RETRIES) {
-          console.log(`[BiddingService Retry] Attempt ${attempt} failed with retryable error: ${error.message} (code: ${error.code})`);
-          // Exponential backoff with jitter
-          const delay = Math.min(50 * Math.pow(2, attempt), 500) + Math.random() * 50;
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue;
+        if (!this._isRetryableError(error) || attempt === this.MAX_RETRIES) {
+          throw error;
         }
-        console.log(`[BiddingService Error] Non-retryable or max retries reached: ${error.message} (code: ${error.code})`);
-        throw error;
+
+        const delay =
+          Math.min(50 * Math.pow(2, attempt), 500) +
+          Math.random() * 50;
+
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
+
     throw lastError;
   }
 
-  /**
-   * Single transaction attempt. Reads auction state within the session,
-   * locks the bidder's wallet, atomically updates the auction, refunds
-   * the previous winner, and handles anti-snipe extension.
-   */
-  static async _executeBidTransaction({ auctionId, userId, amount, bidKey, auctionTitle }) {
+  static async _executeBidTransaction({
+    auctionId,
+    userId,
+    amount,
+    increment,
+    bidKey,
+    auctionTitle,
+    attempt
+  }) {
     const session = await mongoose.startSession();
     session.startTransaction();
 
     try {
-      // ── Read current auction state within the transaction ──────────
-      // This gives us snapshot-consistent previousWinner info.
-      // If another transaction committed between our start and this read,
-      // we'll get a WriteConflict when we try to update (which we retry).
-      const currentAuction = await Auction.findById(auctionId).session(session);
+      const auction = await Auction.findById(auctionId).session(session);
 
-      if (!currentAuction || currentAuction.status !== 'ACTIVE') {
+      if (!auction || auction.status !== 'ACTIVE') {
         throw new Error('Auction is not active');
       }
-      if (new Date(currentAuction.endDate) <= new Date()) {
+
+      if (new Date(auction.endDate) <= new Date()) {
         throw new Error('Auction has already ended');
       }
-      if (currentAuction.winnerId && currentAuction.winnerId.toString() === userId.toString()) {
-        throw new Error('You are already the highest bidder. Wait until someone outbids you.');
+
+      if (
+        auction.winnerId &&
+        auction.winnerId.toString() === userId.toString()
+      ) {
+        throw new Error(
+          'You are already the highest bidder. Wait until someone outbids you.'
+        );
       }
 
-      const minimumIncrement = Math.min(...(currentAuction.bidIncrementOptions || [100]));
-      const minAllowedBid = currentAuction.currentHighestBid + minimumIncrement;
-      if (amount < minAllowedBid) {
-        throw new Error(`Bid must be at least ₹${minAllowedBid}`);
+      const minimumIncrement = Math.min(
+        ...(auction.bidIncrementOptions || [100])
+      );
+
+      const bidAmount =
+        amount != null
+          ? amount
+          : auction.currentHighestBid + increment;
+
+      const minimumBid = auction.currentHighestBid + minimumIncrement;
+
+      if (bidAmount < minimumBid) {
+        throw new Error(`Bid must be at least ₹${minimumBid}`);
       }
 
-      const previousWinnerId = currentAuction.winnerId;
-      const previousAmount = currentAuction.currentHighestBid;
+      const previousWinnerId = auction.winnerId;
+      const previousAmount = auction.currentHighestBid;
 
-      // ── STEP 1: Lock the new bidder's funds ────────────────────────
-      await WalletService.lockFunds({
-        userId,
-        amount,
-        referenceType: 'BID',
-        referenceId: currentAuction._id,
-        idempotencyKey: bidKey,
-        description: `Bid lock for auction: "${auctionTitle}"`
-      }, session);
+      const effectiveBidKey =
+        bidKey ||
+        `bid-lock-${auctionId}-${bidAmount}-${userId}-att${attempt}`;
 
-      // ── STEP 2: ATOMIC AUCTION UPDATE ──────────────────────────────
-      // The $lt guard is the core concurrency invariant:
-      // - Only a strictly higher bid can update the auction
-      // - Equal bids are rejected (first-accepted-wins)
-      // - bids[], currentHighestBid, winnerId updated atomically
+      // Lock bidder's money
+      await WalletService.lockFunds(
+        {
+          userId,
+          amount: bidAmount,
+          referenceType: 'BID',
+          referenceId: auction._id,
+          idempotencyKey: effectiveBidKey,
+          description: `Bid lock for auction: "${auctionTitle}"`
+        },
+        session
+      );
+
+      // Accept the bid only if it is still higher than the current bid
       const updatedAuction = await Auction.findOneAndUpdate(
         {
           _id: auctionId,
           status: 'ACTIVE',
-          currentHighestBid: { $lt: amount }
+          currentHighestBid: { $lt: bidAmount }
         },
         {
           $set: {
-            currentHighestBid: amount,
+            currentHighestBid: bidAmount,
             winnerId: userId
           },
           $push: {
             bids: {
               _id: new mongoose.Types.ObjectId(),
               userId,
-              amount,
+              amount: bidAmount,
               isBuyNow: false,
               createdAt: new Date()
             }
           }
         },
-        { session, returnDocument: 'after' }
+        {
+          session,
+          returnDocument: 'after'
+        }
       );
 
       if (!updatedAuction) {
-        // The atomic condition failed:
-        // (a) A higher or equal bid was already accepted, OR
-        // (b) The auction is no longer ACTIVE (finalized concurrently)
-        // Transaction aborts → wallet lock is rolled back automatically.
+        if (increment != null) {
+          throw new Error(
+            'BID_INCREMENT_RETRYABLE: Higher bid placed concurrently'
+          );
+        }
+
         throw new Error(
           'Bid not accepted — a higher or equal bid was already placed, ' +
           'or the auction is no longer active.'
         );
       }
 
-      // ── STEP 3: Refund the previous highest bidder ─────────────────
-      // Deterministic idempotency key (NO Date.now()) → retries are safe
-      if (previousWinnerId && previousWinnerId.toString() !== userId.toString()) {
-        const refundKey = `outbid-refund-${auctionId}-${previousWinnerId}-${previousAmount}`;
-        await WalletService.unlockFunds({
-          userId: previousWinnerId,
-          amount: previousAmount,
-          referenceType: 'REFUND',
-          referenceId: currentAuction._id,
-          idempotencyKey: refundKey,
-          description: `Outbid refund for auction: "${auctionTitle}"`
-        }, session);
+      // Return money to the previous highest bidder
+      if (
+        previousWinnerId &&
+        previousWinnerId.toString() !== userId.toString()
+      ) {
+        const refundKey =
+          `outbid-refund-${auctionId}-${previousWinnerId}-${previousAmount}`;
+
+        await WalletService.unlockFunds(
+          {
+            userId: previousWinnerId,
+            amount: previousAmount,
+            referenceType: 'REFUND',
+            referenceId: auction._id,
+            idempotencyKey: refundKey,
+            description: `Outbid refund for auction: "${auctionTitle}"`
+          },
+          session
+        );
       }
 
-      // ── STEP 4: Anti-Snipe Extension ───────────────────────────────
+      // Extend auction when a bid arrives in the last 2 minutes
       const now = new Date();
-      const currentEnd = new Date(updatedAuction.endDate);
-      const diffMs = currentEnd - now;
-      const TWO_MINUTES_MS = 2 * 60 * 1000;
-      const FIVE_MINUTES_MS = 5 * 60 * 1000;
-      let antiSnipeExtended = false;
+      const remainingTime =
+        new Date(updatedAuction.endDate) - now;
 
-      if (diffMs > 0 && diffMs < TWO_MINUTES_MS) {
-        const newEndDate = new Date(currentEnd.getTime() + FIVE_MINUTES_MS);
+      const TWO_MINUTES = 2 * 60 * 1000;
+      const FIVE_MINUTES = 5 * 60 * 1000;
+
+      let extended = false;
+
+      if (remainingTime > 0 && remainingTime < TWO_MINUTES) {
+        const newEndDate = new Date(
+          new Date(updatedAuction.endDate).getTime() + FIVE_MINUTES
+        );
+
         await Auction.findOneAndUpdate(
           { _id: auctionId },
           { $set: { endDate: newEndDate } },
           { session }
         );
+
         updatedAuction.endDate = newEndDate;
-        antiSnipeExtended = true;
-        console.log(`[Anti-Snipe] Extended auction ${auctionId} by 5 minutes`);
+        extended = true;
       }
 
-      // ── STEP 5: Commit ─────────────────────────────────────────────
       await session.commitTransaction();
 
-      const bid = updatedAuction.bids[updatedAuction.bids.length - 1];
+      const bid =
+        updatedAuction.bids[updatedAuction.bids.length - 1];
 
-      // Post-commit: re-schedule auction timer if anti-snipe extended
-      if (antiSnipeExtended) {
+      if (extended) {
         const AuctionService = require('./auctionService');
         await AuctionService.scheduleAuctionEnd(updatedAuction);
       }
 
-      return { auction: updatedAuction, bid };
+      return {
+        auction: updatedAuction,
+        bid
+      };
     } catch (error) {
       await session.abortTransaction();
       throw error;
@@ -231,30 +276,36 @@ class BiddingService {
     }
   }
 
-  /**
-   * Determine if an error is a transient transaction error that should be retried.
-   * WriteConflict (code 112) and TransientTransactionError are retryable.
-   * Business logic errors (bid too low, insufficient balance, etc.) are NOT.
-   */
   static _isRetryableError(error) {
-    // MongoDB driver method
-    if (typeof error.hasErrorLabel === 'function' &&
-        error.hasErrorLabel('TransientTransactionError')) {
+    if (
+      error.message &&
+      error.message.includes('BID_INCREMENT_RETRYABLE')
+    ) {
       return true;
     }
-    // Mongoose/driver error labels array
-    if (error.errorLabels && error.errorLabels.includes('TransientTransactionError')) {
+
+    if (
+      typeof error.hasErrorLabel === 'function' &&
+      error.hasErrorLabel('TransientTransactionError')
+    ) {
       return true;
     }
-    // Direct WriteConflict code
+
+    if (
+      error.errorLabels &&
+      error.errorLabels.includes('TransientTransactionError')
+    ) {
+      return true;
+    }
+
     if (error.code === 112 || error.codeName === 'WriteConflict') {
       return true;
     }
-    // Nested WriteConflict in error message (some driver versions)
-    if (error.message && error.message.includes('WriteConflict')) {
-      return true;
-    }
-    return false;
+
+    return (
+      error.message &&
+      error.message.includes('WriteConflict')
+    );
   }
 }
 

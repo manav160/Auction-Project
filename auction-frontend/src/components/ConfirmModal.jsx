@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { memo } from 'react';
 import './ConfirmModal.css';
 
 const ConfirmModal = ({ 
@@ -45,10 +45,11 @@ const ConfirmModal = ({
         <p className="modal-message">{message}</p>
 
         <div className="modal-action-buttons">
-          <button className="modal-btn modal-cancel-btn" onClick={onCancel}>
+          <button type="button" className="modal-btn modal-cancel-btn" onClick={onCancel}>
             {cancelText}
           </button>
           <button 
+            type="button"
             className="modal-btn modal-confirm-btn" 
             style={getVariantStyle()} 
             onClick={onConfirm}
@@ -61,4 +62,4 @@ const ConfirmModal = ({
   );
 };
 
-export default ConfirmModal;
+export default memo(ConfirmModal);

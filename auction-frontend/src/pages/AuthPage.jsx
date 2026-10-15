@@ -1,10 +1,14 @@
 import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Gavel, Mail, Lock, User, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 import api from '../services/api';
-import { setToken } from '../services/auth';
+import { useAuth } from '../context/AuthContext';
 import { animateSuccess, animateError } from '../utils/authAnimations';
 
 const AuthPage = () => {
+  const navigate = useNavigate();
+  const { login } = useAuth();
+
   const [isRegister, setIsRegister] = useState(false);
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
   const [loading, setLoading] = useState(false);
@@ -22,14 +26,14 @@ const AuthPage = () => {
       const endpoint = isRegister ? '/auth/register' : '/auth/login';
       const payload = { name: formData.name, email: formData.email, password: formData.password };
       const response = await api.post(endpoint, payload);
+      
       if (!response.data?.token) throw new Error('Invalid response from server');
-      setToken(response.data.token);
-      // Store user info
-      localStorage.setItem('userRole', response.data.role);
-      localStorage.setItem('userName', response.data.name);
-      localStorage.setItem('userEmail', response.data.email);
+      
+      login(response.data.token, response.data);
       animateSuccess(cardRef.current);
-      setTimeout(() => { window.location.href = '/'; }, 700);
+      setTimeout(() => {
+        navigate('/');
+      }, 500);
     } catch (err) {
       const msg = err.response?.data?.message || err.message || 'An error occurred';
       setError(msg);
@@ -47,7 +51,12 @@ const AuthPage = () => {
             <Gavel size={32} style={{ color: 'var(--accent-primary)' }} />
           </div>
           <h2>{isRegister ? 'Create Account' : 'Welcome Back'}</h2>
-          <p>{isRegister ? 'Create your account to start bidding and listing auctions.' : 'Sign in to access live auctions and bidding dashboard.'}</p>
+          <p>
+            {isRegister 
+              ? 'Create your account to start bidding and listing auctions.' 
+              : 'Sign in to access live auctions and bidding dashboard.'
+            }
+          </p>
         </div>
 
         {error && <p className="error-text">{error}</p>}
@@ -58,8 +67,16 @@ const AuthPage = () => {
               <label className="form-label">Full Name</label>
               <div className="input-with-icon">
                 <User size={16} className="field-icon" />
-                <input id="name" type="text" name="name" value={formData.name}
-                  onChange={handleChange} required className="form-field" placeholder="John Doe" />
+                <input
+                  id="name"
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  className="form-field"
+                  placeholder="John Doe"
+                />
               </div>
             </div>
           )}
@@ -68,8 +85,16 @@ const AuthPage = () => {
             <label className="form-label">Email Address</label>
             <div className="input-with-icon">
               <Mail size={16} className="field-icon" />
-              <input id="email" type="email" name="email" value={formData.email}
-                onChange={handleChange} required className="form-field" placeholder="you@example.com" />
+              <input
+                id="email"
+                type="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                required
+                className="form-field"
+                placeholder="you@example.com"
+              />
             </div>
           </div>
 
@@ -77,12 +102,22 @@ const AuthPage = () => {
             <label className="form-label">Password</label>
             <div className="password-wrapper input-with-icon">
               <Lock size={16} className="field-icon" />
-              <input id="password" type={showPassword ? 'text' : 'password'} name="password"
-                value={formData.password} onChange={handleChange} required
-                className="form-field" placeholder="••••••••" />
-              <button type="button" className="password-toggle"
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                required
+                className="form-field"
+                placeholder="••••••••"
+              />
+              <button
+                type="button"
+                className="password-toggle"
                 onClick={() => setShowPassword(!showPassword)}
-                aria-label="Toggle password visibility">
+                aria-label="Toggle password visibility"
+              >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
@@ -93,7 +128,11 @@ const AuthPage = () => {
           </button>
         </form>
 
-        <button onClick={() => { setIsRegister(!isRegister); setError(''); }} className="link-button">
+        <button 
+          type="button"
+          onClick={() => { setIsRegister(!isRegister); setError(''); }} 
+          className="link-button"
+        >
           {isRegister ? 'Already have an account? Sign In' : "Don't have an account? Register"}
         </button>
 
@@ -107,4 +146,3 @@ const AuthPage = () => {
 };
 
 export default AuthPage;
-

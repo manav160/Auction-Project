@@ -1,9 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Camera } from 'lucide-react';
 import api from '../services/api';
-import { getUserName, getUserRole, setUserAvatar, setUserInfo } from '../services/auth';
+import { useAuth } from '../context/AuthContext';
+import { formatCurrency } from '../utils/formatters';
+import { getImageUrl } from '../utils/config';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const ProfilePage = () => {
+  const { userName, userRole, updateUser, setAvatar } = useAuth();
+
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -12,9 +17,6 @@ const ProfilePage = () => {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState({ text: '', type: '' });
   const fileInputRef = useRef(null);
-
-  const userName = getUserName();
-  const userRole = getUserRole();
 
   const fetchProfile = async () => {
     try {
@@ -64,15 +66,14 @@ const ProfilePage = () => {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
-      // Update local state and localStorage
+      // Update local state and AuthContext
       setProfile((prev) => ({ ...prev, avatar: res.data.avatar }));
-      setUserAvatar(res.data.avatar);
+      setAvatar(res.data.avatar);
       showMessage('Profile photo updated!');
     } catch (err) {
       showMessage(err.response?.data?.message || 'Failed to upload photo.', 'error');
     } finally {
       setUploading(false);
-      // Reset file input
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   };
@@ -84,7 +85,7 @@ const ProfilePage = () => {
     try {
       await api.delete('/auth/avatar');
       setProfile((prev) => ({ ...prev, avatar: null }));
-      setUserAvatar(null);
+      setAvatar(null);
       showMessage('Profile photo removed.');
     } catch (err) {
       showMessage(err.response?.data?.message || 'Failed to remove photo.', 'error');
@@ -100,8 +101,7 @@ const ProfilePage = () => {
     try {
       const res = await api.put('/auth/profile', editForm);
       setProfile((prev) => ({ ...prev, ...res.data }));
-      // Update localStorage
-      setUserInfo(res.data);
+      updateUser(res.data);
       setEditing(false);
       showMessage('Profile updated!');
     } catch (err) {
@@ -112,6 +112,7 @@ const ProfilePage = () => {
   };
 
   const userInitial = (profile?.name || userName || 'U').charAt(0).toUpperCase();
+  const avatarSrc = getImageUrl(profile?.avatar);
 
   return (
     <div className="page-shell">
@@ -156,7 +157,7 @@ const ProfilePage = () => {
                 width: '100px',
                 height: '100px',
                 borderRadius: '50%',
-                background: profile?.avatar
+                background: avatarSrc
                   ? 'transparent'
                   : 'linear-gradient(135deg, #6366f1, #a855f7)',
                 display: 'flex',
@@ -170,9 +171,9 @@ const ProfilePage = () => {
                 boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
               }}
             >
-              {profile?.avatar ? (
+              {avatarSrc ? (
                 <img
-                  src={profile.avatar}
+                  src={avatarSrc}
                   alt="Profile"
                   style={{
                     width: '100%',
@@ -187,6 +188,7 @@ const ProfilePage = () => {
 
             {/* Upload overlay button */}
             <button
+              type="button"
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading}
               title="Upload photo"
@@ -226,6 +228,7 @@ const ProfilePage = () => {
           {profile?.avatar && (
             <div style={{ marginBottom: '12px' }}>
               <button
+                type="button"
                 onClick={handleAvatarRemove}
                 disabled={uploading}
                 style={{
@@ -330,7 +333,7 @@ const ProfilePage = () => {
         ) : (
           <>
             {loading ? (
-              <p style={{ textAlign: 'center' }}>Loading profile…</p>
+              <LoadingSpinner message="Loading profile..." />
             ) : profile ? (
               <div className="detail-metrics">
                 <div>
@@ -340,25 +343,26 @@ const ProfilePage = () => {
                 <div>
                   <strong>Wallet Balance</strong>
                   <p style={{ color: '#10b981', fontWeight: 700, fontSize: '1.2rem' }}>
-                    ₹{profile.walletBalance?.toLocaleString()}
+                    {formatCurrency(profile.walletBalance || 0)}
                   </p>
                 </div>
                 <div>
                   <strong>Locked Balance</strong>
                   <p style={{ color: '#f59e0b', fontWeight: 700 }}>
-                    ₹{profile.lockedBalance?.toLocaleString()}
+                    {formatCurrency(profile.lockedBalance || 0)}
                   </p>
                 </div>
                 <div>
                   <strong>Available</strong>
                   <p style={{ color: '#3b82f6', fontWeight: 700 }}>
-                    ₹{((profile.walletBalance || 0) - (profile.lockedBalance || 0)).toLocaleString()}
+                    {formatCurrency((profile.walletBalance || 0) - (profile.lockedBalance || 0))}
                   </p>
                 </div>
               </div>
             ) : null}
             <div style={{ textAlign: 'center', padding: '16px' }}>
               <button
+                type="button"
                 onClick={() => setEditing(true)}
                 className="btn btn-primary"
                 style={{ minWidth: '160px' }}
@@ -374,4 +378,3 @@ const ProfilePage = () => {
 };
 
 export default ProfilePage;
-

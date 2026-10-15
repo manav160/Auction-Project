@@ -1,53 +1,23 @@
-import React from 'react';
+import React, { memo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, Zap, Clock, Heart, ArrowRight, Clock3, CheckCircle2 } from 'lucide-react';
-
-const STATUS_META = {
-  DRAFT: { label: 'Draft', css: 'status-draft', icon: null },
-  SCHEDULED: { label: 'Scheduled', css: 'status-scheduled', icon: Clock },
-  ACTIVE: { label: 'Live', css: 'status-active', isLive: true },
-  PENDING_RESOLUTION: { label: 'Resolving', css: 'status-pending', icon: Clock3 },
-  COMPLETED: { label: 'Completed', css: 'status-completed', icon: CheckCircle2 },
-  UNSOLD: { label: 'Unsold', css: 'status-unsold', icon: null },
-  CANCELED: { label: 'Canceled', css: 'status-closed', icon: null },
-};
-
-const formatTimeLeft = (endDateStr, status) => {
-  if (status && status !== 'ACTIVE') return null;
-  const diff = new Date(endDateStr).getTime() - Date.now();
-  if (diff <= 0) return { text: 'Ended', urgency: 'ended' };
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  let text;
-  if (hours > 24) {
-    const days = Math.floor(hours / 24);
-    const remHours = hours % 24;
-    text = `${days}d ${remHours}h`;
-  } else if (hours > 0) {
-    text = `${hours}h ${mins}m`;
-  } else {
-    text = `${mins}m`;
-  }
-  const urgency = hours === 0 && mins < 10 ? 'critical' : hours === 0 ? 'warning' : 'normal';
-  return { text, urgency };
-};
+import { Sparkles, Zap, Clock, Heart, ArrowRight } from 'lucide-react';
+import { STATUS_META, normalizeAuctionStatus } from '../utils/constants';
+import { formatCurrency, formatTimeLeft } from '../utils/formatters';
+import { getImageUrl } from '../utils/config';
 
 const AuctionCard = ({ auction, onExtend, onToggleWatchlist }) => {
   const navigate = useNavigate();
   const handleClick = () => navigate(`/auction/${auction._id}`);
 
-  const rawStatus = auction.status || (auction.isActive ? 'ACTIVE' : 'CANCELED');
+  const rawStatus = normalizeAuctionStatus(auction.status || (auction.isActive ? 'ACTIVE' : 'CANCELED'));
   const meta = STATUS_META[rawStatus] || { label: rawStatus, css: 'status-draft' };
 
   const isLive = rawStatus === 'ACTIVE';
   const isPremium = auction.listingType === 'PREMIUM';
   const hasBuyNow = auction.buyNowPrice && auction.buyNowPrice > 0 && (!auction.currentHighestBid || auction.currentHighestBid < 0.8 * auction.buyNowPrice);
 
-  const imageSrc = auction.picture
-    ? (auction.picture.startsWith('http') ? auction.picture : `http://localhost:3001${auction.picture}`)
-    : auction.imageUrl;
-
-  const timeRemainingText = formatTimeLeft(auction.endDate, rawStatus);
+  const imageSrc = getImageUrl(auction.picture || auction.imageUrl);
+  const timeRemaining = formatTimeLeft(auction.endDate, rawStatus);
 
   return (
     <div className={`auction-card-wrapper ${isPremium ? 'premium-wrapper' : ''}`}>
@@ -60,6 +30,7 @@ const AuctionCard = ({ auction, onExtend, onToggleWatchlist }) => {
               src={imageSrc}
               alt={auction.title}
               className="card-hero-img"
+              loading="lazy"
             />
           ) : (
             <div className="card-placeholder-img">
@@ -83,13 +54,16 @@ const AuctionCard = ({ auction, onExtend, onToggleWatchlist }) => {
             <button
               type="button"
               className={`card-watchlist-btn ${auction.isWatchlisted ? 'active' : ''}`}
-              onClick={(e) => { e.stopPropagation(); onToggleWatchlist(auction._id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleWatchlist(auction._id);
+              }}
               title={auction.isWatchlisted ? 'Remove from Watchlist' : 'Add to Watchlist'}
               aria-label="Toggle Watchlist"
             >
               <Heart
                 size={16}
-                fill={auction.isWatchlisted ? "currentColor" : "none"}
+                fill={auction.isWatchlisted ? 'currentColor' : 'none'}
                 stroke="currentColor"
               />
             </button>
@@ -107,7 +81,7 @@ const AuctionCard = ({ auction, onExtend, onToggleWatchlist }) => {
           {/* Strong Financial Current Bid */}
           <div className="card-financial-box">
             <div className="price-label">Current Bid</div>
-            <div className="price-amount">₹{auction.currentHighestBid?.toLocaleString() || '0'}</div>
+            <div className="price-amount">{formatCurrency(auction.currentHighestBid || 0)}</div>
           </div>
 
           {hasBuyNow && (
@@ -115,7 +89,7 @@ const AuctionCard = ({ auction, onExtend, onToggleWatchlist }) => {
               <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                 <Zap size={14} style={{ color: '#8b5cf6' }} /> Buy Now
               </span>
-              <strong style={{ color: '#8b5cf6' }}>₹{auction.buyNowPrice?.toLocaleString()}</strong>
+              <strong style={{ color: '#8b5cf6' }}>{formatCurrency(auction.buyNowPrice)}</strong>
             </div>
           )}
 
@@ -129,15 +103,15 @@ const AuctionCard = ({ auction, onExtend, onToggleWatchlist }) => {
             <div className="meta-item">
               <span className="meta-label">Entry Fee</span>
               <span className="meta-val" style={{ color: auction.entryFee > 0 ? '#f59e0b' : '#10b981' }}>
-                {auction.entryFee > 0 ? `₹${auction.entryFee}` : 'Free'}
+                {auction.entryFee > 0 ? formatCurrency(auction.entryFee) : 'Free'}
               </span>
             </div>
 
-            {timeRemainingText && (
+            {timeRemaining && (
               <div className="meta-item">
                 <span className="meta-label">{isLive ? 'Ends in' : 'Ended'}</span>
-                <span className={`meta-val countdown-val ${timeRemainingText.urgency === 'critical' ? 'countdown-critical' : timeRemainingText.urgency === 'warning' ? 'countdown-warning' : ''}`}>
-                  {timeRemainingText.text}
+                <span className={`meta-val countdown-val ${timeRemaining.urgency === 'critical' ? 'countdown-critical' : timeRemaining.urgency === 'warning' ? 'countdown-warning' : ''}`}>
+                  {timeRemaining.text}
                 </span>
               </div>
             )}
@@ -161,7 +135,10 @@ const AuctionCard = ({ auction, onExtend, onToggleWatchlist }) => {
           <div className="card-extend-bar">
             <button
               className="extend-button"
-              onClick={(e) => { e.stopPropagation(); onExtend(auction._id); }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onExtend(auction._id);
+              }}
             >
               <Clock size={14} style={{ marginRight: '6px' }} />
               Extend Auction
@@ -180,6 +157,4 @@ const AuctionCard = ({ auction, onExtend, onToggleWatchlist }) => {
   );
 };
 
-export default AuctionCard;
-
-
+export default memo(AuctionCard);

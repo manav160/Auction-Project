@@ -10,13 +10,25 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Cloudinary Storage
-const storage = new CloudinaryStorage({
+// Storage configuration for Auction Item Uploads
+const auctionStorage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => ({
-    folder: "auction-uploads",
+    folder: "auction-items",
     allowed_formats: ["jpg", "jpeg", "png", "webp"],
     resource_type: "image",
+    transformation: [{ width: 1200, height: 1200, crop: "limit" }],
+  }),
+});
+
+// Storage configuration for Profile Photo Uploads
+const avatarStorage = new CloudinaryStorage({
+  cloudinary,
+  params: async (req, file) => ({
+    folder: "profile-photos",
+    allowed_formats: ["jpg", "jpeg", "png", "webp"],
+    resource_type: "image",
+    transformation: [{ width: 400, height: 400, crop: "fill", gravity: "face" }],
   }),
 });
 
@@ -36,13 +48,21 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-// Multer Upload Middleware
-const upload = multer({
-  storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5 MB
-  },
+// Multer Middleware for Auction Items (Default export)
+const uploadAuctionImage = multer({
+  storage: auctionStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB limit
   fileFilter,
 });
 
-module.exports = upload;
+// Multer Middleware for User Profile Photos
+const uploadAvatarImage = multer({
+  storage: avatarStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB limit
+  fileFilter,
+});
+
+module.exports = uploadAuctionImage;
+module.exports.uploadAuctionImage = uploadAuctionImage;
+module.exports.uploadAvatarImage = uploadAvatarImage;
+module.exports.cloudinary = cloudinary;

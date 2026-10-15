@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Heart } from 'lucide-react';
 import api from '../services/api';
 import AuctionCard from '../components/AuctionCard';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 const WatchlistPage = () => {
   const [auctions, setAuctions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const fetchWatchlist = async () => {
+  const fetchWatchlist = useCallback(async () => {
     try {
       setLoading(true);
       const res = await api.get('/watchlist');
@@ -20,22 +21,20 @@ const WatchlistPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchWatchlist();
-  }, []);
+  }, [fetchWatchlist]);
 
-  const handleToggleWatchlist = async (auctionId) => {
+  const handleToggleWatchlist = useCallback(async (auctionId) => {
     try {
-      // Toggle call will remove from watchlist because it's already watchlisted
       await api.post(`/watchlist/${auctionId}/toggle`);
-      // Update local state by filtering out the removed auction
       setAuctions(prev => prev.filter(auc => auc._id !== auctionId));
     } catch (err) {
       console.error('Watchlist toggle error:', err);
     }
-  };
+  }, []);
 
   return (
     <div className="page-shell">
@@ -50,10 +49,7 @@ const WatchlistPage = () => {
       {error && <p className="error-text">{error}</p>}
       
       {loading ? (
-        <div className="loading-box">
-          <div className="loading-spinner" />
-          <p>Loading watchlist...</p>
-        </div>
+        <LoadingSpinner message="Loading watchlist..." />
       ) : auctions.length === 0 ? (
         <div className="empty-results-box">
           <Heart size={48} className="empty-icon-svg" />

@@ -14,12 +14,12 @@ module.exports = {
       socket.on('joinRoom', (userId) => {
         if (userId) {
           socket.join(userId);
-          console.log(`User ${userId} joined their private room`);
+
         }
       });
 
       socket.on('disconnect', () => {
-        console.log('User disconnected');
+
       });
     });
 
@@ -32,4 +32,27 @@ module.exports = {
     }
     return io;
   },
+  broadcastBidPlaced: (data) => {
+    try {
+      if (!io) return;
+      const { auctionId, updatedAuction, bid, user } = data;
+      io.emit('bidPlaced', {
+        auctionId,
+        currentHighestBid: updatedAuction.currentHighestBid,
+        winnerId: updatedAuction.winnerId,
+        endDate: updatedAuction.endDate,
+        bid: {
+          ...bid.toObject(),
+          userId: {
+            _id: user?._id || user?.id,
+            name: user?.name || 'Unknown User',
+            email: user?.email || ''
+          }
+        }
+      });
+    } catch (err) {
+      console.error('Socket broadcast error:', err.message);
+    }
+  }
 };
+

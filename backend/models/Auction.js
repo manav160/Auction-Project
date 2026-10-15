@@ -164,6 +164,7 @@ const auctionSchema = new mongoose.Schema({
 auctionSchema.index({ title: 'text', description: 'text' });
 
 // Compound & Query Optimization Indexes
+auctionSchema.index({ _id: 1, status: 1, currentHighestBid: 1 }); // Atomic bid acceptance
 auctionSchema.index({ listingType: -1, createdAt: -1 });
 auctionSchema.index({ sellerId: 1 });
 auctionSchema.index({ status: 1 });

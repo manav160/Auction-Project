@@ -3,17 +3,9 @@ import { Plus, X } from 'lucide-react';
 import api from '../services/api';
 import AuctionForm from '../components/AuctionForm';
 import AuctionCard from '../components/AuctionCard';
+import LoadingSpinner from '../components/LoadingSpinner';
 import { useConfirm } from '../utils/useConfirm';
-
-// Groups that match our backend status enum
-const STATUS_GROUPS = [
-  { key: 'SCHEDULED',          label: 'Scheduled',          emptyMsg: 'No scheduled auctions.' },
-  { key: 'ACTIVE',             label: 'Live',               emptyMsg: null, isLive: true },
-  { key: 'PENDING_RESOLUTION', label: 'Resolving',          emptyMsg: null },
-  { key: 'COMPLETED',          label: 'Completed',          emptyMsg: null },
-  { key: 'UNSOLD',             label: 'Unsold',             emptyMsg: null },
-  { key: 'CANCELED',           label: 'Canceled',           emptyMsg: null },
-];
+import { STATUS_GROUPS, normalizeAuctionStatus } from '../utils/constants';
 
 const SellerDashboard = () => {
   const { showConfirm, ConfirmDialog } = useConfirm();
@@ -27,7 +19,7 @@ const SellerDashboard = () => {
       setLoading(true);
       setError('');
       const res = await api.get('/auctions/seller');
-      setAuctions(res.data);
+      setAuctions(res.data || []);
     } catch (err) {
       setError(err.response?.data?.message || err.message || 'Failed to load your auctions');
     } finally {
@@ -35,7 +27,9 @@ const SellerDashboard = () => {
     }
   }, []);
 
-  useEffect(() => { fetchMyAuctions(); }, [fetchMyAuctions]);
+  useEffect(() => {
+    fetchMyAuctions();
+  }, [fetchMyAuctions]);
 
   const handleExtend = async (auctionId) => {
     const confirmed = await showConfirm({
@@ -69,25 +63,16 @@ const SellerDashboard = () => {
     }
   };
 
-  // Normalize status for resilient matching across new and legacy records
-  const normalizeStatus = (s) => {
-    if (!s) return 'CANCELED';
-    const upper = String(s).toUpperCase();
-    if (upper === 'ACTIVE') return 'ACTIVE';
-    if (upper === 'CLOSED') return 'COMPLETED';
-    return upper;
-  };
-
   // Stats
-  const liveCount       = auctions.filter(a => normalizeStatus(a.status) === 'ACTIVE').length;
-  const scheduledCount  = auctions.filter(a => normalizeStatus(a.status) === 'SCHEDULED').length;
-  const completedCount  = auctions.filter(a => normalizeStatus(a.status) === 'COMPLETED').length;
+  const liveCount = auctions.filter(a => normalizeAuctionStatus(a.status) === 'ACTIVE').length;
+  const scheduledCount = auctions.filter(a => normalizeAuctionStatus(a.status) === 'SCHEDULED').length;
+  const completedCount = auctions.filter(a => normalizeAuctionStatus(a.status) === 'COMPLETED').length;
 
   return (
     <div className="page-shell">
       <div className="page-header">
         <h1>Seller Dashboard</h1>
-        <p className="page-subtitle">Manage your auctions</p>
+        <p className="page-subtitle">Manage your auctions and listings</p>
       </div>
 
       {/* Stats row */}
@@ -111,6 +96,7 @@ const SellerDashboard = () => {
       </div>
 
       <button
+        type="button"
         className="primary-button toggle-form-btn"
         onClick={() => setShowForm(!showForm)}
         style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
@@ -126,10 +112,7 @@ const SellerDashboard = () => {
       {error && <div className="error-alert" style={{ marginBottom: '1rem', color: '#ef4444' }}>{error}</div>}
 
       {loading ? (
-        <div className="loading-box">
-          <div className="loading-spinner" />
-          <p>Loading your auctions...</p>
-        </div>
+        <LoadingSpinner message="Loading your auctions..." />
       ) : auctions.length === 0 ? (
         <div className="empty-results-box">
           <p>You haven't created any auctions yet.</p>
@@ -137,8 +120,8 @@ const SellerDashboard = () => {
       ) : (
         <>
           {STATUS_GROUPS.map(group => {
-            const group_auctions = auctions.filter(a => normalizeStatus(a.status) === group.key);
-            if (group_auctions.length === 0) return null;
+            const groupAuctions = auctions.filter(a => normalizeAuctionStatus(a.status) === group.key);
+            if (groupAuctions.length === 0) return null;
             return (
               <section key={group.key} className="auction-group">
                 <h2 className="auction-group-title">
@@ -146,14 +129,14 @@ const SellerDashboard = () => {
                   {group.label}
                 </h2>
                 <div className="auction-grid">
-                  {group_auctions.map(auction => {
-                    const norm = normalizeStatus(auction.status);
+                  {groupAuctions.map(auction => {
+                    const norm = normalizeAuctionStatus(auction.status);
                     return (
                       <div key={auction._id} className="seller-auction-wrapper">
                         <AuctionCard auction={auction} onExtend={norm === 'ACTIVE' ? handleExtend : undefined} />
                         <div className="seller-action-row">
                           {(norm === 'ACTIVE' || norm === 'SCHEDULED' || norm === 'DRAFT') && (
-                            <button className="danger-button" onClick={() => handleClose(auction._id)}>
+                            <button type="button" className="danger-button" onClick={() => handleClose(auction._id)}>
                               Cancel Auction
                             </button>
                           )}

@@ -1,104 +1,88 @@
 const Auction = require('../models/Auction');
-const MockPayment = require('../models/MockPayment');
-const mongoose = require('mongoose');
 const WalletService = require('../services/walletService');
 const AuctionService = require('../services/auctionService');
+const PlatformSettingsService = require('../services/platformSettingsService');
+const { withTransaction } = require('../utils/transaction');
 
-// @desc    Extend an auction
-// @route   POST /api/extend
-// @access  Private (Seller owner only)
+// @desc    Extend an auction by N days (default 1)
+// @route   POST /api/extend or POST /api/extend/:id or POST /api/auctions/:id/extend
 const extendAuction = async (req, res) => {
-  const session = await mongoose.startSession();
-  session.startTransaction();
-
   try {
-    const { auctionId, days } = req.body;
+    const targetId = req.params.id || req.body?.auctionId;
+    const days = Math.max(1, Math.min(7, parseInt(req.body?.days ?? 1, 10) || 1));
     const userId = req.user.id;
-    const parsedDays = parseInt(days, 10);
 
-    if (!parsedDays || parsedDays < 1 || parsedDays > 7) {
-      return res.status(400).json({ message: 'Extension days must be between 1 and 7' });
-    }
+    const settings = await PlatformSettingsService.getSettings();
+    const feePerDay = settings.extensionFee || 100;
+    const totalFee = days * feePerDay;
 
-    const auction = await Auction.findById(auctionId || req.params.id).session(session);
-    if (!auction) {
-      return res.status(404).json({ message: 'Auction not found' });
-    }
+    const updatedAuction = await withTransaction(async (session) => {
+      const auction = await Auction.findById(targetId).session(session);
+      if (!auction) {
+        const err = new Error('Auction not found');
+        err.statusCode = 404;
+        throw err;
+      }
+      if (auction.sellerId.toString() !== userId) {
+        const err = new Error('Only the seller can extend the auction');
+        err.statusCode = 403;
+        throw err;
+      }
+      if (auction.status !== 'ACTIVE') {
+        throw new Error('Cannot extend an inactive auction');
+      }
 
-    // Only the seller can extend their own auction
-    if (auction.sellerId.toString() !== userId) {
-      return res.status(403).json({ message: 'Only the seller can extend the auction' });
-    }
+      const currentExtended = auction.extendedDays || 0;
+      if (currentExtended + days > 7) {
+        throw new Error(`Total extension limit exceeded. Maximum ${7 - currentExtended} more days available.`);
+      }
 
-    // Check if auction is active before extending
-    if (auction.status !== 'ACTIVE') {
-      return res.status(400).json({ message: 'Cannot extend an inactive auction' });
-    }
+      if (totalFee > 0) {
+        const reqIdempotencyKey = req.headers['x-idempotency-key'] || req.headers['idempotency-key'] || req.body?.idempotencyKey;
+        await WalletService.payFee({
+          userId,
+          amount: totalFee,
+          referenceType: 'EXTENSION_FEE',
+          referenceId: auction._id,
+          idempotencyKey: reqIdempotencyKey || `extend-${auction._id}-${currentExtended}-${days}`,
+          description: `Extension fee of ₹${totalFee} paid for auction: "${auction.title}"`
+        }, session);
+      }
 
-    if (auction.extendedDays + parsedDays > 7) {
-      return res.status(400).json({ 
-        message: `Total extension limit exceeded. You can only extend for a maximum of ${7 - auction.extendedDays} more days.` 
-      });
-    }
+      const newEndDate = new Date(auction.endDate);
+      newEndDate.setDate(newEndDate.getDate() + days);
 
-    // Calculate fee
-    const fee = parsedDays * Math.max(10, 0.01 * auction.currentHighestBid);
+      const updated = await Auction.findOneAndUpdate(
+        { _id: auction._id, status: 'ACTIVE', extendedDays: { $lte: 7 - days } },
+        {
+          $inc: { extendedDays: days, totalExtensionFeePaid: totalFee },
+          $set: { endDate: newEndDate, lastExtensionDate: new Date() },
+          $push: { extensionHistory: { days, fee: totalFee, extendedAt: new Date() } }
+        },
+        { session, returnDocument: 'after' }
+      );
 
-    // Deduct the fee from the seller's available balance in the wallet
-    const idempotencyKey = `extension-fee-${auction._id}-${auction.extendedDays}-${parsedDays}-${Date.now()}`;
-    await WalletService.payFee({
-      userId,
-      amount: fee,
-      referenceType: 'EXTENSION_FEE',
-      referenceId: auction._id,
-      idempotencyKey,
-      description: `Extension fee of ₹${fee} paid for auction: "${auction.title}"`
-    }, session);
-
-    // Mock payment record for logging
-    await MockPayment.create([{
-      auctionId: auction._id,
-      sellerId: userId,
-      amount: fee,
-      status: 'Success'
-    }], { session, ordered: true });
-
-    // Update auction dates and extension parameters
-    const currentEndDate = new Date(auction.endDate);
-    currentEndDate.setDate(currentEndDate.getDate() + parsedDays);
-
-    auction.endDate = currentEndDate;
-    auction.extendedDays += parsedDays;
-    auction.totalExtensionFeePaid += fee;
-    auction.lastExtensionDate = new Date();
-    auction.extensionHistory.push({
-      days: parsedDays,
-      fee,
-      extendedAt: new Date()
+      if (!updated) throw new Error('Extension limit exceeded (7 days maximum) or auction is no longer active.');
+      return updated;
     });
 
-    await auction.save({ session });
-
-    await session.commitTransaction();
-    session.endSession();
-
-    // Reschedule in-memory timer with the new date outside the database transaction
-    await AuctionService.scheduleAuctionEnd(auction);
+    await AuctionService.scheduleAuctionEnd(updatedAuction);
 
     res.json({
-      message: `Auction extended successfully by ${parsedDays} day(s)`,
-      fee,
-      extendedDays: auction.extendedDays,
-      newEndDate: auction.endDate
+      message: `Auction extended successfully by ${days} day(s)`,
+      fee: totalFee,
+      extendedDays: updatedAuction.extendedDays,
+      newEndDate: updatedAuction.endDate,
+      auction: {
+        id: updatedAuction._id,
+        newEndDate: updatedAuction.endDate,
+        feePaid: totalFee
+      }
     });
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
     console.error('Extend Auction Error:', error);
-    res.status(400).json({ message: error.message || 'Failed to extend auction' });
+    res.status(error.statusCode || 400).json({ message: error.message || 'Failed to extend auction' });
   }
 };
 
-module.exports = {
-  extendAuction,
-};
+module.exports = { extendAuction };

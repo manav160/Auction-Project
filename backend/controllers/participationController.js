@@ -1,6 +1,5 @@
 const Participation = require('../models/Participation');
 const Auction = require('../models/Auction');
-const User = require('../models/User');
 const { enrichAuctions } = require('../utils/enricher');
 
 // @desc    Get logged-in user's participations
@@ -8,22 +7,13 @@ const { enrichAuctions } = require('../utils/enricher');
 // @access  Private
 const getMyParticipations = async (req, res) => {
   try {
-    console.log('GET /api/participations/me | User:', req.user.id);
-
-    // Get user to retrieve email
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    const participations = await Participation.find({ email: user.email })
+    const participations = await Participation.find({ userId: req.user.id })
       .populate({
         path: 'auctionId',
         populate: { path: 'sellerId', select: 'name email' },
       })
       .sort({ joinedAt: -1 });
 
-    console.log(`Found ${participations.length} participations`);
     const auctions = participations
       .map((p) => p.auctionId)
       .filter(Boolean);
@@ -41,14 +31,9 @@ const getMyParticipations = async (req, res) => {
 // @access  Private
 const checkParticipation = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
     const participation = await Participation.findOne({
       auctionId: req.params.auctionId,
-      email: user.email,
+      userId: req.user.id,
     });
 
     res.json({ joined: !!participation });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, memo, useMemo } from 'react';
 import './CustomSelect.css';
 
 const CustomSelect = ({ 
@@ -12,22 +12,20 @@ const CustomSelect = ({
   const containerRef = useRef(null);
 
   // Normalize options array to { value, label } format
-  const normalizedOptions = options.map(opt => {
-    if (typeof opt === 'object' && opt !== null) {
-      return { value: opt.value, label: opt.label || opt.value };
-    }
-    return { value: opt, label: opt };
-  });
+  const normalizedOptions = useMemo(() => {
+    return options.map(opt => {
+      if (typeof opt === 'object' && opt !== null) {
+        return { value: opt.value, label: opt.label || opt.value };
+      }
+      return { value: opt, label: opt };
+    });
+  }, [options]);
 
   const selectedOption = normalizedOptions.find(opt => String(opt.value) === String(value));
   const displayLabel = selectedOption ? selectedOption.label : placeholder;
 
-  // Toggle dropdown menu
-  const handleToggle = () => {
-    setIsOpen(prev => !prev);
-  };
+  const handleToggle = () => setIsOpen(prev => !prev);
 
-  // Select an option
   const handleSelect = (optionValue) => {
     onChange(optionValue);
     setIsOpen(false);
@@ -35,6 +33,7 @@ const CustomSelect = ({
 
   // Close on outside click
   useEffect(() => {
+    if (!isOpen) return;
     const handleClickOutside = (event) => {
       if (containerRef.current && !containerRef.current.contains(event.target)) {
         setIsOpen(false);
@@ -42,10 +41,11 @@ const CustomSelect = ({
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isOpen]);
 
   // Close on Escape key press
   useEffect(() => {
+    if (!isOpen) return;
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
         setIsOpen(false);
@@ -53,7 +53,7 @@ const CustomSelect = ({
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [isOpen]);
 
   return (
     <div className={`custom-select-container ${isOpen ? 'is-open' : ''} ${className}`} ref={containerRef}>
@@ -111,4 +111,4 @@ const CustomSelect = ({
   );
 };
 
-export default CustomSelect;
+export default memo(CustomSelect);

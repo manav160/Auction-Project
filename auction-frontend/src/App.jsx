@@ -1,25 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, NavLink, Link, useNavigate, useLocation } from 'react-router-dom';
 import { Sun, Moon, LogOut, Menu, X, Gavel, Heart, Grid, ShieldCheck, User } from 'lucide-react';
 import './App.css';
-import AuthPage from './pages/AuthPage';
-import HomePage from './pages/HomePage';
-import AuctionDetailPage from './pages/AuctionDetailPage';
-import SellerDashboard from './pages/SellerDashboard';
-import MyParticipationsPage from './pages/MyParticipationsPage';
-import WatchlistPage from './pages/WatchlistPage';
-import ProfilePage from './pages/ProfilePage';
-import AdminDashboard from './pages/AdminDashboard';
-import { removeToken, isAuthenticated, isAdmin, getUserName, getUserRole, getUserAvatar } from './services/auth';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import { getImageUrl } from './utils/config';
+import LoadingSpinner from './components/LoadingSpinner';
+
+// Lazy-loaded route page components for code-splitting and faster initial load
+const HomePage = lazy(() => import('./pages/HomePage'));
+const AuctionDetailPage = lazy(() => import('./pages/AuctionDetailPage'));
+const SellerDashboard = lazy(() => import('./pages/SellerDashboard'));
+const MyParticipationsPage = lazy(() => import('./pages/MyParticipationsPage'));
+const WatchlistPage = lazy(() => import('./pages/WatchlistPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const AuthPage = lazy(() => import('./pages/AuthPage'));
 
 const AppShell = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const authenticated = isAuthenticated();
-  const userName = getUserName();
-  const userRole = getUserRole();
+  const { authenticated, userName, userRole, userAvatar, isAdmin, logout } = useAuth();
+  
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
   const [theme, setTheme] = useState(() => {
     return localStorage.getItem('theme') || 'dark';
   });
@@ -55,12 +57,12 @@ const AppShell = () => {
   }, []);
 
   const handleLogout = () => {
-    removeToken();
+    logout();
     navigate('/auth');
   };
 
   const userInitial = userName ? userName.charAt(0).toUpperCase() : 'U';
-  const userAvatar = getUserAvatar();
+  const avatarSrc = getImageUrl(userAvatar);
 
   return (
     <div className="App">
@@ -68,6 +70,7 @@ const AppShell = () => {
         <div className="header-left">
           {authenticated && (
             <button
+              type="button"
               className="mobile-menu-toggle"
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
               aria-label="Toggle navigation menu"
@@ -109,22 +112,22 @@ const AppShell = () => {
             <NavLink to="/" end className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
               Auctions
             </NavLink>
-            {!isAdmin() && (
+            {!isAdmin && (
               <NavLink to="/seller" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                 My Auctions
               </NavLink>
             )}
-            {!isAdmin() && (
+            {!isAdmin && (
               <NavLink to="/my-participations" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                 My Bids
               </NavLink>
             )}
-            {!isAdmin() && (
+            {!isAdmin && (
               <NavLink to="/watchlist" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                 Watchlist
               </NavLink>
             )}
-            {isAdmin() && (
+            {isAdmin && (
               <NavLink to="/admin" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                 Admin
               </NavLink>
@@ -137,8 +140,12 @@ const AppShell = () => {
             <>
               <Link to="/profile" className="user-profile-badge" title="View Profile">
                 <div className="user-avatar">
-                  {userAvatar ? (
-                    <img src={userAvatar} alt={userName} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                  {avatarSrc ? (
+                    <img 
+                      src={avatarSrc} 
+                      alt={userName} 
+                      style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} 
+                    />
                   ) : (
                     userInitial
                   )}
@@ -147,7 +154,7 @@ const AppShell = () => {
                 <span className="user-role-tag">{userRole}</span>
               </Link>
 
-              <button className="logout-btn" onClick={handleLogout} title="Sign Out">
+              <button type="button" className="logout-btn" onClick={handleLogout} title="Sign Out">
                 <LogOut size={15} style={{ marginRight: '6px' }} />
                 <span>Logout</span>
               </button>
@@ -157,6 +164,7 @@ const AppShell = () => {
           )}
 
           <button 
+            type="button"
             className="theme-toggle-btn"
             onClick={toggleTheme}
             title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}
@@ -174,7 +182,12 @@ const AppShell = () => {
           <div className="mobile-drawer-content" onClick={(e) => e.stopPropagation()}>
             <div className="mobile-drawer-header">
               <span className="mobile-drawer-title">Navigation</span>
-              <button className="mobile-drawer-close" onClick={() => setMobileMenuOpen(false)}>
+              <button 
+                type="button" 
+                className="mobile-drawer-close" 
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="Close mobile navigation"
+              >
                 <X size={20} />
               </button>
             </div>
@@ -183,19 +196,19 @@ const AppShell = () => {
                 <Grid size={18} />
                 <span>Auctions</span>
               </NavLink>
-              {!isAdmin() && (
+              {!isAdmin && (
                 <NavLink to="/seller" className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
                   <Gavel size={18} />
                   <span>My Auctions</span>
                 </NavLink>
               )}
-              {!isAdmin() && (
+              {!isAdmin && (
                 <NavLink to="/my-participations" className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
                   <ShieldCheck size={18} />
                   <span>My Bids</span>
                 </NavLink>
               )}
-              {!isAdmin() && (
+              {!isAdmin && (
                 <NavLink to="/watchlist" className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
                   <Heart size={18} />
                   <span>Watchlist</span>
@@ -205,7 +218,7 @@ const AppShell = () => {
                 <User size={18} />
                 <span>Profile</span>
               </NavLink>
-              {isAdmin() && (
+              {isAdmin && (
                 <NavLink to="/admin" className={({ isActive }) => `mobile-nav-item ${isActive ? 'active' : ''}`}>
                   <ShieldCheck size={18} />
                   <span>Admin</span>
@@ -216,23 +229,28 @@ const AppShell = () => {
         </div>
       )}
 
-      <Routes>
-        <Route path="/auth" element={<AuthPage />} />
-        <Route path="/" element={authenticated ? <HomePage /> : <Navigate to="/auth" />} />
-        <Route path="/auction/:id" element={authenticated ? <AuctionDetailPage /> : <Navigate to="/auth" />} />
-        <Route path="/seller" element={authenticated && !isAdmin() ? <SellerDashboard /> : <Navigate to="/auth" />} />
-        <Route path="/my-participations" element={authenticated ? <MyParticipationsPage /> : <Navigate to="/auth" />} />
-        <Route path="/watchlist" element={authenticated ? <WatchlistPage /> : <Navigate to="/auth" />} />
-        <Route path="/profile" element={authenticated ? <ProfilePage /> : <Navigate to="/auth" />} />
-        <Route path="/admin" element={authenticated && isAdmin() ? <AdminDashboard /> : <Navigate to="/" />} />
-      </Routes>
+      {/* Main Routes with Suspense Fallback */}
+      <Suspense fallback={<LoadingSpinner message="Loading page..." />}>
+        <Routes>
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/" element={authenticated ? <HomePage /> : <Navigate to="/auth" replace />} />
+          <Route path="/auction/:id" element={authenticated ? <AuctionDetailPage /> : <Navigate to="/auth" replace />} />
+          <Route path="/seller" element={authenticated && !isAdmin ? <SellerDashboard /> : <Navigate to="/auth" replace />} />
+          <Route path="/my-participations" element={authenticated ? <MyParticipationsPage /> : <Navigate to="/auth" replace />} />
+          <Route path="/watchlist" element={authenticated ? <WatchlistPage /> : <Navigate to="/auth" replace />} />
+          <Route path="/profile" element={authenticated ? <ProfilePage /> : <Navigate to="/auth" replace />} />
+          <Route path="/admin" element={authenticated && isAdmin ? <AdminDashboard /> : <Navigate to="/" replace />} />
+        </Routes>
+      </Suspense>
     </div>
   );
 };
 
 const App = () => (
   <Router>
-    <AppShell />
+    <AuthProvider>
+      <AppShell />
+    </AuthProvider>
   </Router>
 );
 

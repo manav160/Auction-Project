@@ -1,6 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, memo } from 'react';
 import api from '../services/api';
 import { animateAuctionSuccess, animateAuctionError } from '../utils/auctionAnimations';
+import { CATEGORIES, CONDITIONS } from '../utils/constants';
 
 const AuctionForm = ({ onAuctionCreated }) => {
   const now = new Date();
@@ -40,7 +41,7 @@ const AuctionForm = ({ onAuctionCreated }) => {
         ...formData,
         startingPrice: parseFloat(formData.startingPrice),
         entryFee: parseFloat(formData.entryFee) || 0,
-        maxParticipants: formData.endCondition === 'time' ? 9999 : parseInt(formData.maxParticipants),
+        maxParticipants: formData.endCondition === 'time' ? 9999 : parseInt(formData.maxParticipants, 10),
         endDate: formData.endCondition === 'participants'
           ? new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString()
           : (formData.endDate || defaultEnd),
@@ -101,12 +102,9 @@ const AuctionForm = ({ onAuctionCreated }) => {
               onChange={handleChange}
               className="form-field"
             >
-              <option value="Electronics">Electronics</option>
-              <option value="Collectibles">Collectibles</option>
-              <option value="Fashion">Fashion</option>
-              <option value="Home">Home</option>
-              <option value="Motors">Motors</option>
-              <option value="Other">Other</option>
+              {CATEGORIES.map(cat => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
             </select>
           </div>
           <div style={{ flex: 1 }}>
@@ -117,31 +115,59 @@ const AuctionForm = ({ onAuctionCreated }) => {
               onChange={handleChange}
               className="form-field"
             >
-              <option value="NEW">New</option>
-              <option value="LIKE_NEW">Like New</option>
-              <option value="USED">Used</option>
-              <option value="REFURBISHED">Refurbished</option>
+              {CONDITIONS.map(cond => (
+                <option key={cond.value} value={cond.value}>{cond.label}</option>
+              ))}
             </select>
           </div>
         </div>
 
-        <input type="text" name="title" placeholder="Auction Title" value={formData.title}
-          onChange={handleChange} required className="form-field" />
+        <input 
+          type="text" 
+          name="title" 
+          placeholder="Auction Title" 
+          value={formData.title}
+          onChange={handleChange} 
+          required 
+          className="form-field" 
+        />
 
-        <textarea name="description" placeholder="Description" value={formData.description}
-          onChange={handleChange} required className="form-field textarea-field" />
+        <textarea 
+          name="description" 
+          placeholder="Description" 
+          value={formData.description}
+          onChange={handleChange} 
+          required 
+          className="form-field textarea-field" 
+        />
 
         <div className="form-row" style={{ display: 'flex', gap: '1rem' }}>
           <div style={{ flex: 1 }}>
             <label className="form-label">Starting Price (₹)</label>
-            <input type="number" name="startingPrice" placeholder="1000" value={formData.startingPrice}
-              onChange={handleChange} required className="form-field" min="10" />
+            <input 
+              type="number" 
+              name="startingPrice" 
+              placeholder="1000" 
+              value={formData.startingPrice}
+              onChange={handleChange} 
+              required 
+              className="form-field" 
+              min="10" 
+            />
           </div>
 
           <div style={{ flex: 1 }}>
             <label className="form-label">Buyer Entry Fee (₹)</label>
-            <input type="number" name="entryFee" placeholder="0" value={formData.entryFee}
-              onChange={handleChange} className="form-field" min="0" max="1000" />
+            <input 
+              type="number" 
+              name="entryFee" 
+              placeholder="0" 
+              value={formData.entryFee}
+              onChange={handleChange} 
+              className="form-field" 
+              min="0" 
+              max="1000" 
+            />
             <span className="form-hint" style={{ fontSize: '0.75rem' }}>₹0 = Free Entry</span>
           </div>
         </div>
@@ -180,8 +206,12 @@ const AuctionForm = ({ onAuctionCreated }) => {
         {/* End condition */}
         <div className="form-group">
           <label className="form-label">End Condition</label>
-          <select name="endCondition" value={formData.endCondition}
-            onChange={handleChange} className="form-field">
+          <select 
+            name="endCondition" 
+            value={formData.endCondition}
+            onChange={handleChange} 
+            className="form-field"
+          >
             <option value="time">Time only</option>
             <option value="participants">Participants limit only</option>
             <option value="either">Whichever comes first</option>
@@ -208,8 +238,15 @@ const AuctionForm = ({ onAuctionCreated }) => {
         {formData.endCondition !== 'time' && (
           <div className="form-group">
             <label className="form-label">Max Participants</label>
-            <input type="number" name="maxParticipants" value={formData.maxParticipants}
-              onChange={handleChange} className="form-field" min="2" max={formData.listingType === 'PREMIUM' ? 100 : 15} />
+            <input 
+              type="number" 
+              name="maxParticipants" 
+              value={formData.maxParticipants}
+              onChange={handleChange} 
+              className="form-field" 
+              min="2" 
+              max={formData.listingType === 'PREMIUM' ? 100 : 15} 
+            />
           </div>
         )}
 
@@ -221,4 +258,4 @@ const AuctionForm = ({ onAuctionCreated }) => {
   );
 };
 
-export default AuctionForm;
+export default memo(AuctionForm);

@@ -24,6 +24,6 @@ const walletSchema = new mongoose.Schema({
     required: true,
     default: 0
   }
-}, { timestamps: true });
+}, { timestamps: true, optimisticConcurrency: true });
 
 module.exports = mongoose.model('Wallet', walletSchema);

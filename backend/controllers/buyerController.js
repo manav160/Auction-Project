@@ -1,48 +1,13 @@
-const Auction = require('../models/Auction');
-const Bid = require('../models/Bid');
-const Participation = require('../models/Participation');
-const User = require('../models/User');
-const { enrichAuctions } = require('../utils/enricher');
-
+const BiddingService = require('../services/biddingService');
+const { getMyParticipations } = require('./participationController');
+const socket = require('../socket');
 
 // @desc    Get auctions the logged-in buyer has joined
 // @route   GET /api/buyer/my-auctions
-// @access  Private (Buyer)
-const getJoinedAuctions = async (req, res) => {
-  try {
-    console.log('GET /api/participations/me | User:', req.user.id);
-    
-    // Get user to retrieve email
-    const user = await User.findById(req.user.id);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    const participations = await Participation.find({ email: user.email })
-      .populate({
-        path: 'auctionId',
-        populate: { path: 'sellerId', select: 'name email' },
-      })
-      .sort({ joinedAt: -1 });
-
-    console.log(`Found ${participations.length} participations`);
-    const auctions = participations
-      .map((p) => p.auctionId)
-      .filter(Boolean); // filter out any null refs
-
-    const enrichedAuctions = await enrichAuctions(auctions, req.user.id);
-    res.json(enrichedAuctions);
-  } catch (error) {
-    console.error('Error in getJoinedAuctions:', error);
-    res.status(500).json({ message: 'Server error', error: error.message });
-  }
-};
+const getJoinedAuctions = getMyParticipations;
 
 // @desc    Increase bid by a specified increment
 // @route   POST /api/buyer/increase-bid
-// @access  Private (Buyer)
-const BiddingService = require('../services/biddingService');
-
 const increaseBid = async (req, res) => {
   try {
     const { auctionId, increment } = req.body;
@@ -52,38 +17,19 @@ const increaseBid = async (req, res) => {
       return res.status(400).json({ message: 'Auction ID and increment are required' });
     }
 
-    const auction = await Auction.findById(auctionId);
-    if (!auction) {
-      return res.status(404).json({ message: 'Auction not found' });
-    }
+    const idempotencyKey = req.headers['x-idempotency-key']
+      || req.headers['idempotency-key']
+      || req.body?.idempotencyKey
+      || null;
 
-    const newBidAmount = auction.currentHighestBid + Number(increment);
-
-    // Delegate to transactional bidding service
     const { auction: updatedAuction, bid } = await BiddingService.placeBid({
       auctionId,
       userId,
-      amount: newBidAmount
+      increment: Number(increment),
+      idempotencyKey
     });
 
-    const socket = require('../socket');
-    const io = socket.getIo();
-    const biddingUser = await User.findById(userId).select('name email');
-
-    io.emit('bidPlaced', {
-      auctionId,
-      currentHighestBid: updatedAuction.currentHighestBid,
-      winnerId: updatedAuction.winnerId,
-      endDate: updatedAuction.endDate,
-      bid: {
-        ...bid.toObject(),
-        userId: {
-          _id: userId,
-          name: biddingUser?.name || 'Unknown User',
-          email: biddingUser?.email || ''
-        }
-      }
-    });
+    socket.broadcastBidPlaced({ auctionId, updatedAuction, bid, user: req.user });
 
     res.status(201).json({
       message: 'Bid increased successfully',
@@ -105,3 +51,4 @@ module.exports = {
   getJoinedAuctions,
   increaseBid,
 };
+

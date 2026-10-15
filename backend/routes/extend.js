@@ -4,5 +4,7 @@ const { extendAuction } = require('../controllers/extendController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.post('/', protect, extendAuction);
+router.post('/:id', protect, extendAuction);
 
 module.exports = router;
+
